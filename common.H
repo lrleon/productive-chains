@@ -7,8 +7,6 @@
 # include <tpl_dynArray.H>
 # include <ahSort.H>
 
-# include <csvparser.h>
-
 using Uid = unsigned long;
 
 using fmt = gnu::autosprintf;
@@ -35,10 +33,8 @@ struct Planta
   }
 };
 
-struct TablaPlantas
+struct TablaPlantas : public DynArray<Planta>
 {
-  DynArray<Planta> table;
-
   TablaPlantas(const char * name)
   {
     ifstream in(name);
@@ -53,18 +49,18 @@ struct TablaPlantas
 	if (row.size() != n)
 	  throw domain_error(fmt("number of fields of row %d is not %d",
 				 row.size(), n));
-	table.emplace(atol(row(0).c_str()), row(1), row(2));
+	this->emplace(atol(row(0).c_str()), row(1), row(2));
       }
 
-    in_place_sort(table, [] (auto p1, auto p2) { return p1.id < p2.id; });
+    in_place_sort(*this, [] (auto p1, auto p2) { return p1.id < p2.id; });
   }
   
   const Planta & operator () (const Uid id) const
   {
-    auto p = bsearch(table, Planta(id), 
+    auto p = bsearch(*this, Planta(id), 
 		     [] (auto p1, auto p2) { return p1.id < p2.id; });
     if (not p.first)
-      throw std::domain_error(fmt("Planta id %ld no encintrado", id));
+      throw std::domain_error(fmt("Planta id %ld no encontrado", id));
     
     return p.second;
   }
@@ -96,8 +92,7 @@ struct Producto
     return out << p.to_string();
   }
 
-  // Orden según planta_d,cod_aran
-  struct Cmp_Cod_Planta
+  struct Cmp_Cod_Planta   // Orden según planta_d,cod_aran
   {
     bool operator () (const Producto & p1, const Producto & p2) const noexcept
     {
@@ -108,10 +103,8 @@ struct Producto
   };
 }; 
 
-struct TablaP
+struct TablaP : public DynArray<Producto> 
 {
-  DynArray<Producto> table;
-
   TablaP(const char * name)
   {    
     ifstream in(name);
@@ -126,16 +119,16 @@ struct TablaP
 	if (row.size() != n)
 	  throw domain_error(fmt("number of fields of row %d is not %d",
 				 row.size(), n));
-	table.emplace(atol(row(0).c_str()), row(1), row(3), 
+	this->emplace(atol(row(0).c_str()), row(1), row(3), 
 		      atol(row(4).c_str()));
       }
 
-    in_place_sort(table, [] (auto p1, auto p2) { return p1.id < p2.id; });
+    in_place_sort(*this, [] (auto p1, auto p2) { return p1.id < p2.id; });
   }
 
   const Producto & operator () (Uid id) const
   {
-    auto p = bsearch(table, Producto(id), 
+    auto p = bsearch(*this, Producto(id), 
 		     [] (auto p1, auto p2) { return p1.id < p2.id; });
     if (not p.first)
       throw std::domain_error("Producto id %ld no encontrado");
@@ -146,20 +139,19 @@ struct TablaP
 
 struct TablaProductos : public TablaP
 {
-  DynArray<Producto*> index_by_planta;
+  DynArray<Producto*> index;
   Producto::Cmp_Cod_Planta cmp;
   
   TablaProductos(const char * name) 
     : TablaP(name), cmp(Producto::Cmp_Cod_Planta())
   {
-    index_by_planta = build_index_ptr(table, cmp);
+    index = build_index_ptr(*this, cmp);
   }
 
   DynList<Producto*> plantas(Uid planta_id, const string cod_aran) const
   {
     Producto tmp(planta_id, cod_aran);
-    return bsearch_dup(index_by_planta, tmp, cmp);
-      // [this] (auto p1, auto p2) { return cmp(*p1, *p2); } );	
+    return bsearch_dup(index, tmp, cmp);
   }
 };
 
@@ -191,48 +183,41 @@ struct ProveedorInsumo
   }
 };
 
-struct TablaProveedorInsumo
+struct TablaProveedorInsumo : public DynArray<ProveedorInsumo> 
 {
-  DynArray<ProveedorInsumo> table;
-
   TablaProveedorInsumo(const char * name, long anho)
   {
-    CsvParser * parser = CsvParser_new(name, ",", true);
+    ifstream in(name);
+    if (in.fail()) 
+      throw std::domain_error(fmt("No se pudo abrir %s", name));
 
-    auto header = CsvParser_getHeader(parser);
-    if (header == nullptr)
-      throw std::domain_error("failed to parse header (file name valid?)");
-    CsvParser_destroy_row(header);
-
-    CsvRow *row;
-    while ((row = CsvParser_getRow(parser))) 
+    auto header = csv_read_row(in, ','); 
+    const size_t n = header.size();
+    for (size_t i = 0; in.good(); ++i)
       {
-	char **rowFields = CsvParser_getFields(row);
-	long year = atol(rowFields[4]);
+	auto row = csv_read_row(in, ',');
+	if (row.size() != n)
+	  throw domain_error(fmt("number of fields of row %d is not %d",
+				 row.size(), n));
+
+	long year = atol(row(4).c_str());
 	if (year != anho)
 	  continue;
-	table.emplace(atol(rowFields[0]), atol(rowFields[1]), 
-		      atol(rowFields[2]), atof(rowFields[3]), 
-		      atof(rowFields[5]));
-      CsvParser_destroy_row(row);
+	this->emplace(atol(row(0).c_str()), atol(row[1].c_str()),
+		      atol(row(2).c_str()), atof(row(3).c_str()),
+		      atof(row(5).c_str()));
     }
 
-  CsvParser_destroy(parser);
-
-  in_place_sort(table, 
-		[] (auto p1, auto p2) { return p1.insumo_id < p2.insumo_id; });
+    in_place_sort(*this, [] (auto p1, auto p2) 
+		  { return p1.insumo_id < p2.insumo_id; });
   }
 
   DynList<ProveedorInsumo*> operator() (Uid insumo_id) const
   {
     ProveedorInsumo p; p.insumo_id = insumo_id;
-    auto ret = bsearch_dup(table, p, [] (auto p1, auto p2)
-			   { return p1.insumo_id < p2.insumo_id; });
-    if (ret.is_empty())
-      throw std::domain_error(fmt("Insumo id %ld no encontrado", insumo_id));
-
-    return ret;
-  }
+    return bsearch_dup(*this, p, [] (auto p1, auto p2)
+		       { return p1.insumo_id < p2.insumo_id; });
+  } 
 };
 
 struct Proveedor
@@ -244,15 +229,12 @@ struct Proveedor
 
   Proveedor(Uid i = -1) : id(i) {}
 
-  Proveedor(Uid i, const char * nom, const char * r, Uid pid)
+  Proveedor(Uid i, const string & nom, const string & r, Uid pid)
     : id(i), nombre(nom), rif(r), planta_id(pid) {}
 
   string to_string() const
   {
-    return ::to_string(id) + " " + 
-      nombre + " " + 
-      rif + 
-      ::to_string(planta_id);
+    return ::to_string(id) + " " + nombre + " " + rif + ::to_string(planta_id);
   }
 
   friend ostream & operator << (ostream & out, const Proveedor & p)
@@ -261,36 +243,33 @@ struct Proveedor
   }
 };
 
-struct TablaProveedores
+struct TablaProveedores : public DynArray<Proveedor>
 {
-  DynArray<Proveedor> table;
-
   TablaProveedores(const char * name)
   {
-    CsvParser * parser = CsvParser_new(name, ",", true);
+    ifstream in(name);
+    if (in.fail()) 
+      throw std::domain_error(fmt("No se pudo abrir %s", name));
 
-    auto header = CsvParser_getHeader(parser);
-    if (header == nullptr)
-      throw std::domain_error("failed to parse header (file name valid?)");
-    CsvParser_destroy_row(header);
-
-    CsvRow *row;
-    while ((row = CsvParser_getRow(parser))) 
+    auto header = csv_read_row(in, ','); 
+    const size_t n = header.size();
+    for (size_t i = 0; in.good(); ++i)
       {
-	char **rowFields = CsvParser_getFields(row);
-	table.emplace(atol(rowFields[0]), rowFields[1], rowFields[2], 
-		      atol(rowFields[6]));
-	CsvParser_destroy_row(row);
+	auto row = csv_read_row(in, ',');
+	if (row.size() != n)
+	  throw domain_error(fmt("number of fields of row %d is not %d",
+				 row.size(), n));
+
+	this->emplace(atol(row(0).c_str()), row(1), row(2), 
+		      atol(row(6).c_str()));
       }
 
-    CsvParser_destroy(parser);
-
-    in_place_sort(table, [] (auto p1, auto p2) { return p1.id < p2.id; });
+    in_place_sort(*this, [] (auto p1, auto p2) { return p1.id < p2.id; });
   }
 
   const Proveedor & operator () (Uid id) const
   {
-    auto p = bsearch(table, Proveedor(id), 
+    auto p = bsearch(*this, Proveedor(id), 
 		     [] (auto p1, auto p2) { return p1.id < p2.id; });
     if (not p.first)
       throw std::domain_error(fmt("Proveedor id %ld no encontrado", id));
