@@ -17,16 +17,22 @@ INCLUDE = -I. -I $(ALEPH)
 LIBS = -L $(ALEPH) \
        -lAleph -lnana -lm -lgsl -lgslcblas -lgmp -lmpfr -lasprintf -lpthread -lc
 
-all: test
+all: test test-1
 
 clean:
-	rm -f test testcsv
+	rm -f test testcsv test-1
 
 csvparser.o: csvparser.h csvparser.c
 	$(CC) $(INCLUDE) $*.c -g -O0 -c
 
-test: test.C csvparser.o common.H
+test: test.C csvparser.o common.H grafo.H
+	$(CXX) $(FLAGS) $(INCLUDE) $@.C -g -O0 -o $@ csvparser.o $(LIBS)
+
+test-1: test-1.C csvparser.o common.H grafo.H
 	$(CXX) $(FLAGS) $(INCLUDE) $@.C -g -O0 -o $@ csvparser.o $(LIBS)
 
 testcsv: testcsv.C csvparser.o
 	$(CXX) $(FLAGS) $(INCLUDE) $@.C -g -O0 -o $@ csvparser.o $(LIBS)
+
+test-csv: test-csv.C parse-csv.H
+	$(CXX) $(FLAGS) $(INCLUDE) $@.C -g -O0 -o $@ $(LIBS)

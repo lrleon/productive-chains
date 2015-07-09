@@ -6,7 +6,7 @@
 int main() {
     int i =  0;
     //                                   file, delimiter, first_line_is_header?
-    CsvParser *csvparser = CsvParser_new("unidad_economica.csv", ",", 1);
+    CsvParser *csvparser = CsvParser_new("test.csv", ",", 1);
     CsvRow *header;
     CsvRow *row;
 
