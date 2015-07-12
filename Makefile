@@ -17,22 +17,37 @@ INCLUDE = -I. -I $(ALEPH)
 LIBS = -L $(ALEPH) \
        -lAleph -lnana -lm -lgsl -lgslcblas -lgmp -lmpfr -lasprintf -lpthread -lc
 
-all: test test-1
+all: test test-1 test-2 test-3
 
 clean:
-	rm -f test testcsv test-1
+	rm -f test testcsv test-1 test-2 test-3 test-1-op test-2-op test-3-op
 
 csvparser.o: csvparser.h csvparser.c
 	$(CC) $(INCLUDE) $*.c -g -O0 -c
 
 test: test.C csvparser.o common.H grafo.H
-	$(CXX) $(FLAGS) $(INCLUDE) $@.C -g -O0 -o $@ csvparser.o $(LIBS)
+	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ csvparser.o $(LIBS)
 
 test-1: test-1.C csvparser.o common.H grafo.H
-	$(CXX) $(FLAGS) $(INCLUDE) $@.C -g -O0 -o $@ csvparser.o $(LIBS)
+	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ $(LIBS)
+
+test-1-op: test-1.C common.H grafo.H
+	$(CXX) $(OPT) $(INCLUDE) test-1.C -o $@ $(LIBS)
+
+test-2: test-2.C common.H grafo.H
+	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ $(LIBS)
+
+test-2-op: test-2.C common.H grafo.H
+	$(CXX) $(OPT) $(INCLUDE) test-2.C -o $@ $(LIBS)
+
+test-3: test-3.C common.H grafo.H
+	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ $(LIBS)
+
+test-2-op: test-2.C common.H grafo.H
+	$(CXX) $(OPT) $(INCLUDE) test-2.C -o $@ $(LIBS)
 
 testcsv: testcsv.C csvparser.o
-	$(CXX) $(FLAGS) $(INCLUDE) $@.C -g -O0 -o $@ csvparser.o $(LIBS)
+	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ csvparser.o $(LIBS)
 
 test-csv: test-csv.C parse-csv.H
-	$(CXX) $(FLAGS) $(INCLUDE) $@.C -g -O0 -o $@ $(LIBS)
+	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ $(LIBS)

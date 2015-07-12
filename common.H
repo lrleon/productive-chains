@@ -4,12 +4,18 @@
 # include <fstream>
 # include <parse-csv.H>
 
-# include <tpl_dynArray.H>
+# include <tpl_dynArrayHeap.H>
 # include <ahSort.H>
 
 using Uid = unsigned long;
 
 using fmt = gnu::autosprintf;
+
+template <class T>
+struct CmpId
+{
+  bool operator () (const T & i1, const T & i2) const { return i1.id < i2.id; }
+};
 
 struct Planta
 {
@@ -35,6 +41,21 @@ struct Planta
 
 struct TablaPlantas : public DynArray<Planta>
 {
+  struct CmpRif
+  {
+    bool operator () (Planta * p1, Planta * p2) const noexcept
+    {
+      return p1->rif < p2->rif;
+    }
+
+    bool operator () (const Planta & p1, const Planta & p2) const noexcept
+    {
+      return p1.rif < p2.rif;
+    }
+  };
+
+  DynArray<Planta*> rif_index;
+
   TablaPlantas(const char * name)
   {
     ifstream in(name);
@@ -43,27 +64,41 @@ struct TablaPlantas : public DynArray<Planta>
 
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
+    DynArrayHeap<Planta, CmpId<Planta>> heap;
     for (size_t i = 0; in.good(); ++i)
       {
 	auto row = csv_read_row(in, ',');
 	if (row.size() != n)
 	  throw domain_error(fmt("number of fields of row %d is not %d",
 				 row.size(), n));
-	this->emplace(atol(row(0).c_str()), row(1), row(2));
+	heap.emplace(atol(row(0).c_str()), row(1), row(2));
+      }
+      
+    const size_t nrow = heap.size();
+    DynArrayHeap<Planta*, CmpRif> heap_rip; heap_rip.reserve(n);
+    this->reserve(nrow);
+    for (size_t i = 0; not heap.is_empty(); ++i)
+      {
+	Planta * ptr = &this->access(i);
+	*ptr = move(heap.getMin());
+	heap_rip.insert_direct(ptr);
       }
 
-    in_place_sort(*this, [] (auto p1, auto p2) { return p1.id < p2.id; });
+    rif_index.reserve(nrow);
+    for (size_t i = 0; not heap_rip.is_empty(); ++i)
+      rif_index(i) = heap_rip.getMin();
   }
   
-  const Planta & operator () (const Uid id) const
+  Planta * operator () (Uid id) const
   {
-    auto p = bsearch(*this, Planta(id), 
-		     [] (auto p1, auto p2) { return p1.id < p2.id; });
-    if (not p.first)
-      throw std::domain_error(fmt("Planta id %ld no encontrado", id));
-    
-    return p.second;
+    return bsearch(*this, Planta(id), CmpId<Planta>());
   }
+
+  DynList<Planta*> rif(const string & rif) const
+  {
+    Planta tmp; tmp.rif = rif;
+    return bsearch_dup(rif_index, tmp, CmpRif());
+  }			       
 };
 
 
@@ -113,27 +148,30 @@ struct TablaP : public DynArray<Producto>
 
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
+    DynArrayHeap<Producto, CmpId<Producto>> heap; 
     for (size_t i = 0; in.good(); ++i)
       {
 	auto row = csv_read_row(in, ',');
 	if (row.size() != n)
 	  throw domain_error(fmt("number of fields of row %d is not %d",
 				 row.size(), n));
-	this->emplace(atol(row(0).c_str()), row(1), row(3), 
-		      atol(row(4).c_str()));
+	heap.emplace(atol(row(0).c_str()), row(1), row(3), 
+		     atol(row(4).c_str()));
       }
 
-    in_place_sort(*this, [] (auto p1, auto p2) { return p1.id < p2.id; });
+    reserve(heap.size());
+    for (size_t i = 0; not heap.is_empty(); ++i)
+      this->access(i) = move(heap.get());
   }
 
-  const Producto & operator () (Uid id) const
+ Producto * operator () (Uid id) const
   {
     auto p = bsearch(*this, Producto(id), 
 		     [] (auto p1, auto p2) { return p1.id < p2.id; });
-    if (not p.first)
+    if (p == nullptr)
       throw std::domain_error("Producto id %ld no encontrado");
 
-    return p.second;
+    return p;
   }
 };
 
@@ -155,6 +193,7 @@ struct TablaProductos : public TablaP
   }
 };
 
+using Insumo = Producto;
 using TablaInsumos = TablaP;
 
 struct ProveedorInsumo
@@ -185,6 +224,15 @@ struct ProveedorInsumo
 
 struct TablaProveedorInsumo : public DynArray<ProveedorInsumo> 
 {
+  struct Cmp
+  { 
+    bool operator () (const ProveedorInsumo & pi1, 
+		      const ProveedorInsumo & pi2) const noexcept
+    {
+      return pi1.insumo_id < pi2.insumo_id;
+    }
+  };
+
   TablaProveedorInsumo(const char * name, long anho)
   {
     ifstream in(name);
@@ -193,6 +241,7 @@ struct TablaProveedorInsumo : public DynArray<ProveedorInsumo>
 
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
+    DynArrayHeap<ProveedorInsumo, Cmp> heap;
     for (size_t i = 0; in.good(); ++i)
       {
 	auto row = csv_read_row(in, ',');
@@ -203,20 +252,20 @@ struct TablaProveedorInsumo : public DynArray<ProveedorInsumo>
 	long year = atol(row(4).c_str());
 	if (year != anho)
 	  continue;
-	this->emplace(atol(row(0).c_str()), atol(row[1].c_str()),
-		      atol(row(2).c_str()), atof(row(3).c_str()),
-		      atof(row(5).c_str()));
-    }
+	heap.emplace(atol(row(0).c_str()), atol(row[1].c_str()),
+		     atol(row(2).c_str()), atof(row(3).c_str()), 
+		     atof(row(5).c_str()));
+      }
 
-    in_place_sort(*this, [] (auto p1, auto p2) 
-		  { return p1.insumo_id < p2.insumo_id; });
+    this->reserve(heap.size());
+    for (size_t i = 0; not heap.is_empty(); ++i)
+      this->access(i) = move(heap.getMin());
   }
 
   DynList<ProveedorInsumo*> operator() (Uid insumo_id) const
   {
     ProveedorInsumo p; p.insumo_id = insumo_id;
-    return bsearch_dup(*this, p, [] (auto p1, auto p2)
-		       { return p1.insumo_id < p2.insumo_id; });
+    return bsearch_dup(*this, p, Cmp());
   } 
 };
 
@@ -225,16 +274,24 @@ struct Proveedor
   Uid id;
   string nombre;
   string rif;
+  Uid pais_origen_id;
+  Uid pais_procedencia_id;
   Uid planta_id;
+  bool nacional = true;
 
   Proveedor(Uid i = -1) : id(i) {}
 
-  Proveedor(Uid i, const string & nom, const string & r, Uid pid)
-    : id(i), nombre(nom), rif(r), planta_id(pid) {}
+  Proveedor(Uid i, const string & nom, const string & r, 
+	    Uid origen_id, Uid procedencia_id, const string & nac, Uid pid)
+    : id(i), nombre(nom), rif(r), pais_origen_id(procedencia_id),
+      pais_procedencia_id(procedencia_id), nacional(nac == "V"), planta_id(pid)
+  {}
 
   string to_string() const
   {
-    return ::to_string(id) + " " + nombre + " " + rif + ::to_string(planta_id);
+    const string type = nacional ? "VEN" : "EXT";
+    return type + " " + ::to_string(id) + " " + nombre + " " + rif + 
+      " " + ::to_string(planta_id);
   }
 
   friend ostream & operator << (ostream & out, const Proveedor & p)
@@ -253,6 +310,7 @@ struct TablaProveedores : public DynArray<Proveedor>
 
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
+    DynArrayHeap<Proveedor, CmpId<Proveedor>> heap;
     for (size_t i = 0; in.good(); ++i)
       {
 	auto row = csv_read_row(in, ',');
@@ -260,20 +318,26 @@ struct TablaProveedores : public DynArray<Proveedor>
 	  throw domain_error(fmt("number of fields of row %d is not %d",
 				 row.size(), n));
 
-	this->emplace(atol(row(0).c_str()), row(1), row(2), 
-		      atol(row(6).c_str()));
+	auto nac = row(5);
+	if (nac != "V" and nac != "E")
+	  throw domain_error(fmt("Tabla prov: nacion inválida en fila %ld", i));
+	heap.emplace(atol(row(0).c_str()), row(1), row(2), 
+		     atol(row(3).c_str()), atol(row(4).c_str()), nac,
+		     atol(row(6).c_str()));
       }
 
-    in_place_sort(*this, [] (auto p1, auto p2) { return p1.id < p2.id; });
+    this->reserve(heap.size());
+    for (size_t i = 0; not heap.is_empty(); ++i)
+      this->access(i) = move(heap.getMin());
   }
 
-  const Proveedor & operator () (Uid id) const
+  Proveedor * operator () (Uid id) const
   {
     auto p = bsearch(*this, Proveedor(id), 
 		     [] (auto p1, auto p2) { return p1.id < p2.id; });
-    if (not p.first)
+    if (p == nullptr)
       throw std::domain_error(fmt("Proveedor id %ld no encontrado", id));
-    return p.second;
+    return p;
   }
 };
 
