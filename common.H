@@ -17,6 +17,62 @@ struct CmpId
   bool operator () (const T & i1, const T & i2) const { return i1.id < i2.id; }
 };
 
+struct UnidadEconomica
+{
+  string rif = "No definido";
+  string nombre = "Sin Nombre";
+
+  UnidadEconomica(const string & r = "No definido", 
+		  const string & nom = "Sin Nombre") : rif(r), nombre(nom) {}
+
+  string to_string() const { return rif + " " + nombre; }
+
+  friend ostream & operator << (ostream & out, const UnidadEconomica & u)
+  {
+    return out << u.to_string();
+  }
+};
+
+struct TablaUnidadesEconomicas : public DynArray<UnidadEconomica>
+{
+  struct Cmp
+  {
+    bool operator () (const UnidadEconomica & u1, 
+		      const UnidadEconomica & u2) const noexcept
+    {
+      return u1.rif < u2.rif;
+    }
+  };
+
+  TablaUnidadesEconomicas(const char * name)
+  {
+    ifstream in(name);
+    if (in.fail()) 
+      throw std::domain_error(fmt("No se pudo abrir %s", name));
+
+    auto header = csv_read_row(in, ','); 
+    const size_t n = header.size();
+    DynArrayHeap<UnidadEconomica, Cmp> heap;
+    for (size_t i = 0; in.good(); ++i)
+      {
+	auto row = csv_read_row(in, ',');
+	if (row.size() != n)
+	  throw domain_error(fmt("number of fields of row %d is not %d",
+				 row.size(), n));
+	heap.emplace(row(0), row(2));
+      }
+      
+    this->reserve(heap.size());
+    for (size_t i = 0; not heap.is_empty(); ++i)
+      this->access(i) = move(heap.getMin());
+  }
+  
+  UnidadEconomica * operator () (const string rif) const
+  {
+    return bsearch(*this, UnidadEconomica(rif), Cmp());
+  }
+};
+
 struct Planta
 {
   Uid id;
@@ -41,21 +97,6 @@ struct Planta
 
 struct TablaPlantas : public DynArray<Planta>
 {
-  struct CmpRif
-  {
-    bool operator () (Planta * p1, Planta * p2) const noexcept
-    {
-      return p1->rif < p2->rif;
-    }
-
-    bool operator () (const Planta & p1, const Planta & p2) const noexcept
-    {
-      return p1.rif < p2.rif;
-    }
-  };
-
-  DynArray<Planta*> rif_index;
-
   TablaPlantas(const char * name)
   {
     ifstream in(name);
@@ -74,31 +115,15 @@ struct TablaPlantas : public DynArray<Planta>
 	heap.emplace(atol(row(0).c_str()), row(1), row(2));
       }
       
-    const size_t nrow = heap.size();
-    DynArrayHeap<Planta*, CmpRif> heap_rip; heap_rip.reserve(n);
-    this->reserve(nrow);
+    this->reserve(heap.size());
     for (size_t i = 0; not heap.is_empty(); ++i)
-      {
-	Planta * ptr = &this->access(i);
-	*ptr = move(heap.getMin());
-	heap_rip.insert_direct(ptr);
-      }
-
-    rif_index.reserve(nrow);
-    for (size_t i = 0; not heap_rip.is_empty(); ++i)
-      rif_index(i) = heap_rip.getMin();
+      this->access(i) = move(heap.getMin());
   }
   
   Planta * operator () (Uid id) const
   {
     return bsearch(*this, Planta(id), CmpId<Planta>());
   }
-
-  DynList<Planta*> rif(const string & rif) const
-  {
-    Planta tmp; tmp.rif = rif;
-    return bsearch_dup(rif_index, tmp, CmpRif());
-  }			       
 };
 
 
@@ -127,13 +152,11 @@ struct Producto
     return out << p.to_string();
   }
 
-  struct Cmp_Cod_Planta   // Orden según planta_d,cod_aran
+  struct CmpCodAran   // Orden según planta_d,cod_aran
   {
     bool operator () (const Producto & p1, const Producto & p2) const noexcept
     {
-      if (p1.planta_id == p2.planta_id)
-	return p1.cod_aran < p2.cod_aran;
-      return p1.planta_id < p2.planta_id;
+      return p1.cod_aran < p2.cod_aran;
     }
   };
 }; 
@@ -178,17 +201,17 @@ struct TablaP : public DynArray<Producto>
 struct TablaProductos : public TablaP
 {
   DynArray<Producto*> index;
-  Producto::Cmp_Cod_Planta cmp;
+  Producto::CmpCodAran cmp;
   
   TablaProductos(const char * name) 
-    : TablaP(name), cmp(Producto::Cmp_Cod_Planta())
+    : TablaP(name), cmp(Producto::CmpCodAran())
   {
     index = build_index_ptr(*this, cmp);
   }
 
-  DynList<Producto*> plantas(Uid planta_id, const string cod_aran) const
+  DynList<Producto*> por_cod_aran(const string & cod_aran) const
   {
-    Producto tmp(planta_id, cod_aran);
+    Producto tmp; tmp.cod_aran = cod_aran;
     return bsearch_dup(index, tmp, cmp);
   }
 };
@@ -283,8 +306,8 @@ struct Proveedor
 
   Proveedor(Uid i, const string & nom, const string & r, 
 	    Uid origen_id, Uid procedencia_id, const string & nac, Uid pid)
-    : id(i), nombre(nom), rif(r), pais_origen_id(procedencia_id),
-      pais_procedencia_id(procedencia_id), nacional(nac == "V"), planta_id(pid)
+    : id(i), nombre(nom), rif(r), pais_origen_id(origen_id),
+      pais_procedencia_id(procedencia_id), planta_id(pid), nacional(nac == "V")
   {}
 
   string to_string() const
@@ -298,6 +321,10 @@ struct Proveedor
   {
     return out << p.to_string();
   }
+
+  bool es_nacional() const { return nacional; }
+
+  bool es_extranjero() const { return not es_nacional(); }
 };
 
 struct TablaProveedores : public DynArray<Proveedor>

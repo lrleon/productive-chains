@@ -43,8 +43,8 @@ test-2-op: test-2.C common.H grafo.H
 test-3: test-3.C common.H grafo.H
 	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ $(LIBS)
 
-test-2-op: test-2.C common.H grafo.H
-	$(CXX) $(OPT) $(INCLUDE) test-2.C -o $@ $(LIBS)
+test-3-op: test-3.C common.H grafo.H
+	$(CXX) $(OPT) $(INCLUDE) test-3.C -o $@ $(LIBS)
 
 testcsv: testcsv.C csvparser.o
 	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ csvparser.o $(LIBS)
