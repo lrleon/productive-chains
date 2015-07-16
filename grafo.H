@@ -30,40 +30,29 @@ struct Nodo
     s >> origen_id >> procedencia_id;
     return make_pair(origen_id, procedencia_id);
   }
-
-  const auto & origen_id(const pair<Uid, Uid> & p) const 
+  
+  static string rif_extranjero(Uid origen_id, Uid procedencia_id)
   {
-    return p.first; 
-  }
-
-  const auto & procedencia_id(const pair<Uid, Uid> & p) const 
-  {
-    return p.second; 
-  }
-
-  void set_pais(Uid origen_id, Uid procedencia_id)
-  {
-    extranjero = true;
     stringstream s;
     s << origen_id << " " << procedencia_id;
-    rif = s.str();
+    return s.str();
   }
 
-  Nodo() {}
+  Nodo(const string & r = "Sin rif") : rif(r) {}
+
+  Nodo(bool ext, const string & r, const string & nom)
+    : rif(r), nombre(nom), extranjero(ext) {}
 
   Nodo(const string & r, const string & nom) 
     : rif(r), nombre(nom), extranjero(false) {}
 
-  Nodo(Uid origen_id, Uid procedencia_id, const string & nom) : nombre(nom)
-  {
-    set_pais(origen_id, procedencia_id);
-  }
+  Nodo(Uid origen_id, Uid procedencia_id, const string & nom) 
+    : rif(rif_extranjero(origen_id, procedencia_id)), 
+      nombre(nom), extranjero(true) {}
 
   string to_string() const
   {
-    if (es_extranjero())
-      return "EXT " + nombre + " " + rif; 
-    return "VEN " + rif + " " + nombre;
+    return (es_extranjero() ? "EXT " : "EXT") + nombre + " " + rif; 
   }
 
   friend ostream & operator << (ostream & out, const Nodo & p)
@@ -71,7 +60,7 @@ struct Nodo
     return out << p.to_string();
   }
 
-  struct Cmp
+  struct CmpLess
   {
     bool operator () (const Nodo & n1, const Nodo & n2) const noexcept
     {
@@ -81,15 +70,31 @@ struct Nodo
 	    return true; // n1 Nacional < n2 Extranjero
 	  if (n2.es_nacional())
 	    return false; // n1 extranjero > n2 nacional
-
+	  
 	  const auto p1 = n1.pais();
 	  const auto p2 = n2.pais();
 	  if (p1.first == p2.first)
 	    return p1.second < p2.second;
           return p1.first < p2.first;
 	}
-      // Ambos son nacionales
-      return n1.rif < n2.rif;
+      return n1.rif < n2.rif; // Ambos son nacionales
+    }
+  };
+
+  struct CmpEqual
+  {
+    bool operator () (const Nodo & n1, const Nodo & n2) const noexcept
+    {
+      if (n1.es_extranjero() or n2.es_extranjero()) // alguno extranjero?
+	{
+	  if (n1.es_nacional() or n2.es_nacional())
+	    return false; 
+	  
+	  const auto p1 = n1.pais();
+	  const auto p2 = n2.pais();
+	  return p1.first == p2.first and p1.second == p2.second;
+	}
+      return n1.rif == n2.rif; // Ambos son nacionales
     }
   };
 };
@@ -98,7 +103,7 @@ struct Arco
 {
   Uid arco_id     = -1;
   string cod_aran = "Sin codigo";
-  Uid insumo_id   = -1;          // id en la tabla de insumos
+  Uid insumo_id   = -1;          // id en la tabla de insumos 
   double cantidad = 0;
   double coste    = 0;
 
@@ -109,14 +114,22 @@ struct Arco
 
   string to_string() const 
   {
-    return cod_aran + " " + ::to_string(insumo_id) + " " + 
-      ::to_string(cantidad) + " " + ::to_string(coste) + "(" + 
-      ::to_string(arco_id) + ")";
+    return ::to_string(arco_id) + " " + cod_aran + " " 
+      + ::to_string(insumo_id) + 
+      " " + ::to_string(cantidad) + " " + ::to_string(coste);
   }
 
   friend ostream & operator << (ostream & out, const Arco & a)
   {
     return out << a.to_string();
+  }
+
+  friend istream & operator >> (istream & in, Arco & a)
+  {
+    in >> a.arco_id >> a.cod_aran >> a.insumo_id >> a.cantidad >> a.coste;
+    // cout << a.arco_id << a.cod_aran << a.insumo_id << a.cantidad << a.coste
+    // 	 << endl;
+    return in;
   }
 };
 
@@ -124,17 +137,16 @@ struct Arco
 using GrafoSigesic = Array_Graph<Graph_Anode<Nodo>, Graph_Aarc<Arco>>;
 using SG = GrafoSigesic;
 
-static const string OpenField = "{{((";
-static const string CloseField = "))}}";
+static const string Quotes = "\"";
 
 struct Guarda_Nodo
 {
   void operator () (ostream & out, SG &, SG::Node * p) const
   {
     const auto & info = p->get_info();
-    out << (info.es_extranjero() ? "E" : "V")
-	<< OpenField << info.rif << CloseField
-	<< OpenField << info.nombre << CloseField << endl;
+    out << (info.es_extranjero() ? "E" : "V") << endl
+	<< info.rif << endl
+	<< info.nombre << endl;
   }
 };
   
@@ -143,18 +155,16 @@ struct Carga_Nodo
   void operator () (istream & in, SG &, SG::Node * p) const
   {
     string nacional, rif, nombre;
-    in >> nacional;
-    // in >> OpenField;
-    // in >> rif >> CloseField
-    //    >> OpenField >> nombre >> CloseField;
+    
+    getline(in, nacional);
+    getline(in, rif);
+    getline(in, nombre);
 
     auto ptr = &p->get_info();
-
     if (nacional == "V")
-      {
-	new (ptr) Nodo(rif, nombre);
-	return;
-      }
+      new (ptr) Nodo(rif, nombre);
+    else 
+      new (ptr) Nodo(true, rif, nombre);
   }
 };
   
@@ -192,18 +202,30 @@ private:
 
   DynSetTree<Node*, Avl_Tree, CmpNode> tabla_nodos;
 
+  Node * search_node(const string & rif) const 
+  {
+    Node node(rif);
+    auto ptr = tabla_nodos.search(&node);
+    if (ptr == nullptr)
+      return nullptr;
+    assert((*ptr)->get_info().rif == rif);
+    return *ptr;
+  }
+
   Node * target_node(Uid producto_id)
   {
     Producto * producto_ptr = tabla_productos(producto_id);
     assert(producto_ptr->id == producto_id);
     Planta * planta_ptr = tabla_plantas(producto_ptr->planta_id);
     assert(planta_ptr->id == producto_ptr->planta_id);
-    Mapa::Node n(Nodo(planta_ptr->rif, producto_ptr->nombre));
-    auto ptr = tabla_nodos.search(&n);
-    if (ptr != nullptr)
-      return *ptr;
+    auto p = search_node(planta_ptr->rif);
+    if (p != nullptr)
+      {
+	assert(p->get_info().rif == planta_ptr->rif);
+	return p;
+      }
 
-    auto p = g.emplace_node(planta_ptr->rif, planta_ptr->nombre);
+    p = g.emplace_node(planta_ptr->rif, planta_ptr->nombre);
     tabla_nodos.insert(p);
     return p;
   }
@@ -212,10 +234,9 @@ private:
 					       Insumo * insumo_ptr) const
   {
     const string & cod_aran = insumo_ptr->cod_aran;
-
-    // Recorre todos los productos asociados al codigo arancelario
+    
+    DynSetTree<string> rifs;// Recorre productos asociados codigo arancelario
     auto productos = tabla_productos.por_cod_aran(cod_aran);
-    DynSetTree<string> rifs;
     for (auto it = productos.get_it(); it.has_curr(); it.next())
       {
 	auto producto_ptr = it.get_curr();
@@ -251,6 +272,7 @@ private:
 	return make_pair(l, "");
       }
 
+    // recorre los proveedores del insumo para determinar nodos fuente
     for (auto it = provs.get_it(); it.has_curr(); it.next())
       {
 	auto prov = it.get_curr();
@@ -258,9 +280,11 @@ private:
 	Proveedor * prov_ptr = tabla_proveedores(prov->proveedor_id);
 	assert(prov_ptr != nullptr);
 
-	Node node;
+	string rif = prov_ptr->rif, nombre = prov_ptr->nombre;
+	bool es_extranjero = true;
 	if (prov_ptr->es_nacional())
 	  {
+	    es_extranjero = false;
 	    auto unidad_ptr = tabla_unidades(prov_ptr->rif);
 	    if (unidad_ptr == nullptr)
 	      {
@@ -268,15 +292,14 @@ private:
 		s << "Rif " << prov_ptr->rif << " asociado a proveedor id "
 		  << prov_ptr->id << " no fue encontrado como unid ecom";
 		log.append(s.str());
-		node = Node(Nodo(prov_ptr->rif, prov_ptr->nombre + " **SR"));
+		nombre += " **SR";
 	      }
-	    else
-	      node = Node(Nodo(prov_ptr->rif, unidad_ptr->nombre));
 	  }
 	else
-	  node = Node(Nodo(prov_ptr->pais_origen_id, 
-			   prov_ptr->pais_procedencia_id, prov_ptr->nombre));
+	  rif = Nodo::rif_extranjero(prov_ptr->pais_origen_id, 
+				     prov_ptr->pais_procedencia_id);
 
+	Node node(Nodo(es_extranjero, move(rif), move(nombre)));
 	auto ptr = tabla_nodos.search(&node);
 	if (ptr != nullptr)
 	  {
@@ -314,9 +337,22 @@ private:
 
 	const Uid insumo_id = atol(row(1).c_str());
 	auto par = source_node(insumo_id);
+	// cout << "Sources:" << endl;
+	// par.first.for_each([] (auto p)
+        //   {
+	//     cout << "    " << p->get_info().rif << " "; 
+	//   });
+	// cout << endl;
+
 	for (auto it = par.first.get_it(); it.has_curr(); it.next())
-	  g.emplace_arc(it.get_curr(), tgt, atol(row(0).c_str()), par.second, 
-			insumo_id, 0, 0);
+	  {
+	    // auto a = 
+	      g.emplace_arc(it.get_curr(), tgt, atol(row(0).c_str()), 
+				   par.second, insumo_id, 0, 0);
+	    // cout << it.get_curr()->get_info().rif << " [" << a->get_info() 
+	    // 	 << "] " << tgt->get_info().rif << endl;
+	  }
+	// cout << "++++++++++++++++" << endl;
       }
   }
   
@@ -340,6 +376,21 @@ public:
 
   void save(ostream & out)
   {
-    IO_Graph<Grafo>(g).save_in_text_mode(out);
+    IO_Graph<Grafo, Carga_Nodo, Guarda_Nodo>(g).save_in_text_mode(out);
   }
 };
+
+void guardar_grafo(GrafoSigesic & g, ostream & out)
+{
+  IO_Graph<GrafoSigesic, Carga_Nodo, Guarda_Nodo>(g).save_in_text_mode(out);
+}
+
+
+GrafoSigesic cargar_grafo(istream & in)
+{
+  GrafoSigesic g;
+  
+  IO_Graph<GrafoSigesic, Carga_Nodo, Guarda_Nodo>(g).load_in_text_mode(in);
+
+  return g;
+}

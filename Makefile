@@ -17,10 +17,10 @@ INCLUDE = -I. -I $(ALEPH)
 LIBS = -L $(ALEPH) \
        -lAleph -lnana -lm -lgsl -lgslcblas -lgmp -lmpfr -lasprintf -lpthread -lc
 
-all: test test-1 test-2 test-3
+all: test test-1 test-2 test-3 test-io
 
 clean:
-	rm -f test testcsv test-1 test-2 test-3 test-1-op test-2-op test-3-op
+	rm -f test testcsv test-1 test-2 test-3 test-1-op test-2-op test-3-op test-io
 
 csvparser.o: csvparser.h csvparser.c
 	$(CC) $(INCLUDE) $*.c -g -O0 -c
@@ -50,4 +50,7 @@ testcsv: testcsv.C csvparser.o
 	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ csvparser.o $(LIBS)
 
 test-csv: test-csv.C parse-csv.H
+	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ $(LIBS)
+
+test-io: test-io.C common.H grafo.H
 	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ $(LIBS)
