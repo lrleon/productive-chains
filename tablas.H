@@ -4,6 +4,8 @@
 # include <fstream>
 # include <parse-csv.H>
 
+# include <tpl_dynSetHash.H>
+# include <tpl_olhash.H>
 # include <tpl_dynArrayHeap.H>
 # include <ahSort.H>
 
@@ -11,11 +13,27 @@ using Uid = unsigned long;
 
 using fmt = gnu::autosprintf;
 
+// template <typename Key, class Cmp>
+// using HashType = OLhashTable<Key, Cmp>;
+
+template <typename Key, class Cmp>
+using HashType = DynSetHash<Key, Cmp>;
+
 template <class T>
-struct CmpId
+struct CmpLessId
 {
   bool operator () (const T & i1, const T & i2) const { return i1.id < i2.id; }
 };
+
+template <class T>
+struct CmpEqualId
+{
+  bool operator () (const T & i1, const T & i2) const { return i1.id == i2.id; }
+};
+
+
+template <class T>
+size_t hash_id(const T & i) { return SuperFastHash(i.id); }
 
 struct UnidadEconomica
 {
@@ -31,20 +49,29 @@ struct UnidadEconomica
   {
     return out << u.to_string();
   }
-};
 
-struct TablaUnidadesEconomicas : public DynArray<UnidadEconomica>
-{
-  struct Cmp
+  struct CmpEqual
   {
     bool operator () (const UnidadEconomica & u1, 
 		      const UnidadEconomica & u2) const noexcept
     {
-      return u1.rif < u2.rif;
+      return u1.rif == u2.rif;
     }
   };
+};
 
-  TablaUnidadesEconomicas(const char * name)
+
+struct TablaUnidadesEconomicas 
+  : public HashType<UnidadEconomica, UnidadEconomica::CmpEqual>
+{
+  using HashTable = HashType<UnidadEconomica, UnidadEconomica::CmpEqual>;
+
+  static size_t hash(const UnidadEconomica & u)
+  {
+    return SuperFastHash(u.rif);
+  }
+
+  void init_hash(const char * name)
   {
     ifstream in(name);
     if (in.fail()) 
@@ -52,24 +79,25 @@ struct TablaUnidadesEconomicas : public DynArray<UnidadEconomica>
 
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
-    DynArrayHeap<UnidadEconomica, Cmp> heap;
     for (size_t i = 0; in.good(); ++i)
       {
 	auto row = csv_read_row(in, ',');
 	if (row.size() != n)
 	  throw domain_error(fmt("number of fields of row %d is not %d",
 				 row.size(), n));
-	heap.emplace(row(0), row(2));
+	emplace(row(0), row(2));
       }
-      
-    this->reserve(heap.size());
-    for (size_t i = 0; not heap.is_empty(); ++i)
-      this->access(i) = move(heap.getMin());
   }
-  
+
+  TablaUnidadesEconomicas(const char * name) 
+    : HashTable(8000, hash, UnidadEconomica::CmpEqual())
+  {
+    init_hash(name);
+  }
+
   UnidadEconomica * operator () (const string rif) const
   {
-    return bsearch(*this, UnidadEconomica(rif), Cmp());
+    return search(UnidadEconomica(rif));
   }
 };
 
@@ -93,11 +121,15 @@ struct Planta
   {
     return out << p.to_string();
   }
+
+  using CmpEqual = CmpEqualId<Planta>;
 };
 
-struct TablaPlantas : public DynArray<Planta>
+struct TablaPlantas : public HashType<Planta, Planta::CmpEqual>
 {
+  using HashTable = HashType<Planta, Planta::CmpEqual>;
   TablaPlantas(const char * name)
+    : HashTable(2171, hash_id<Planta>, Planta::CmpEqual())
   {
     ifstream in(name);
     if (in.fail()) 
@@ -105,24 +137,19 @@ struct TablaPlantas : public DynArray<Planta>
 
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
-    DynArrayHeap<Planta, CmpId<Planta>> heap;
     for (size_t i = 0; in.good(); ++i)
       {
 	auto row = csv_read_row(in, ',');
 	if (row.size() != n)
 	  throw domain_error(fmt("number of fields of row %d is not %d",
 				 row.size(), n));
-	heap.emplace(atol(row(0).c_str()), row(1), row(2));
+	emplace(atol(row(0).c_str()), row(1), row(2));
       }
-      
-    this->reserve(heap.size());
-    for (size_t i = 0; not heap.is_empty(); ++i)
-      this->access(i) = move(heap.getMin());
   }
   
   Planta * operator () (Uid id) const
   {
-    return bsearch(*this, Planta(id), CmpId<Planta>());
+    return search(Planta(id));
   }
 };
 
@@ -133,6 +160,16 @@ struct Producto
   string nombre;
   Uid planta_id;
   string cod_aran;
+
+  double cantidad_decl; // si producto == lo producido
+  double cantidad_real; // si producto == lo vendido
+  double coste;
+
+  // combinación lineal que define al producto. Cada par es un insumo_id
+  // y la cantidad requerida para fabricar una unidad del
+  // producto. Sirve como huella dactilar de un producto pero también
+  // para filtrar arcos en un grafo
+  DynMapTree<Uid, double> comb;
 
   Producto(Uid i = -1) noexcept : id(i) {}
 
@@ -152,18 +189,23 @@ struct Producto
     return out << p.to_string();
   }
 
-  struct CmpCodAran   // Orden según planta_d,cod_aran
+  struct CmpLessCodAran   // Orden según planta_d,cod_aran
   {
     bool operator () (const Producto & p1, const Producto & p2) const noexcept
     {
       return p1.cod_aran < p2.cod_aran;
     }
   };
+
+  using CmpEqual = CmpEqualId<Producto>;
 }; 
 
-struct TablaP : public DynArray<Producto> 
+struct TablaP : public HashType<Producto, Producto::CmpEqual>
 {
+  using HashTable = HashType<Producto, Producto::CmpEqual>;
+
   TablaP(const char * name)
+    : HashTable(166611, hash_id<Producto>, Producto::CmpEqual())
   {    
     ifstream in(name);
     if (in.fail()) 
@@ -171,26 +213,46 @@ struct TablaP : public DynArray<Producto>
 
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
-    DynArrayHeap<Producto, CmpId<Producto>> heap; 
+       for (size_t i = 0; in.good(); ++i)
+      {
+	auto row = csv_read_row(in, ',');
+	if (row.size() != n)
+	  throw domain_error(fmt("number of fields of row %d is not %d",
+				 row.size(), n));
+	emplace(atol(row(0).c_str()), row(1), row(3), atol(row(4).c_str()));
+      }
+  }
+
+  void cargar_costes(long anho, const char * costs_name) 
+  {
+    ifstream in(costs_name);
+    if (in.fail()) 
+      throw std::domain_error(fmt("No se pudo abrir %s", costs_name));
+
+    auto header = csv_read_row(in, ','); 
+    const size_t n = header.size();
     for (size_t i = 0; in.good(); ++i)
       {
 	auto row = csv_read_row(in, ',');
 	if (row.size() != n)
 	  throw domain_error(fmt("number of fields of row %d is not %d",
 				 row.size(), n));
-	heap.emplace(atol(row(0).c_str()), row(1), row(3), 
-		     atol(row(4).c_str()));
-      }
+	if (anho != atol(row(2).c_str()))
+	  continue;
 
-    reserve(heap.size());
-    for (size_t i = 0; not heap.is_empty(); ++i)
-      this->access(i) = move(heap.get());
+	Producto * producto_ptr = search(atol(row(1).c_str()));
+	assert(producto_ptr != nullptr);
+	producto_ptr->cantidad_decl = atof(row(3).c_str());
+	producto_ptr->cantidad_real = atof(row(4).c_str());
+	producto_ptr->coste = atof(row(5).c_str());
+	  
+	emplace(atol(row(0).c_str()), row(1), row(3), atol(row(4).c_str()));
+      }
   }
 
  Producto * operator () (Uid id) const
   {
-    auto p = bsearch(*this, Producto(id), 
-		     [] (auto p1, auto p2) { return p1.id < p2.id; });
+    auto p = search(Producto(id));
     if (p == nullptr)
       throw std::domain_error("Producto id %ld no encontrado");
 
@@ -201,12 +263,16 @@ struct TablaP : public DynArray<Producto>
 struct TablaProductos : public TablaP
 {
   DynArray<Producto*> index;
-  Producto::CmpCodAran cmp;
+  Producto::CmpLessCodAran cmp;
   
-  TablaProductos(const char * name) 
-    : TablaP(name), cmp(Producto::CmpCodAran())
+  TablaProductos(const char * prod_name) 
+    : TablaP(prod_name), cmp(Producto::CmpLessCodAran())
   {
-    index = build_index_ptr(*this, cmp);
+    index.reserve(size());
+    size_t i = 0;
+    mutable_for_each([this, &i] (auto & p) { index(i++) = &p; });
+    in_place_sort(index, [] (auto p1, auto p2)
+		  { return p1->cod_aran < p2->cod_aran; });
   }
 
   DynList<Producto*> por_cod_aran(const string & cod_aran) const
@@ -216,8 +282,17 @@ struct TablaProductos : public TablaP
   }
 };
 
+
 using Insumo = Producto;
 using TablaInsumos = TablaP;
+// struct TablaInsumos : public TablaP
+// {
+//   TablaInsumos(long anho, const char * prod_name, const char * costs_name) 
+//     : TablaP(prod_name)
+//   {
+//     cargar_costes(anho, costs_name);
+//   }
+// };
 
 struct ProveedorInsumo
 {
@@ -247,7 +322,7 @@ struct ProveedorInsumo
 
 struct TablaProveedorInsumo : public DynArray<ProveedorInsumo> 
 {
-  struct Cmp
+  struct CmpLess
   { 
     bool operator () (const ProveedorInsumo & pi1, 
 		      const ProveedorInsumo & pi2) const noexcept
@@ -264,7 +339,7 @@ struct TablaProveedorInsumo : public DynArray<ProveedorInsumo>
 
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
-    DynArrayHeap<ProveedorInsumo, Cmp> heap;
+    DynArrayHeap<ProveedorInsumo, CmpLess> heap;
     for (size_t i = 0; in.good(); ++i)
       {
 	auto row = csv_read_row(in, ',');
@@ -288,7 +363,7 @@ struct TablaProveedorInsumo : public DynArray<ProveedorInsumo>
   DynList<ProveedorInsumo*> operator() (Uid insumo_id) const
   {
     ProveedorInsumo p; p.insumo_id = insumo_id;
-    return bsearch_dup(*this, p, Cmp());
+    return bsearch_dup(*this, p, CmpLess());
   } 
 };
 
@@ -327,9 +402,12 @@ struct Proveedor
   bool es_extranjero() const { return not es_nacional(); }
 };
 
-struct TablaProveedores : public DynArray<Proveedor>
+struct TablaProveedores : public HashType<Proveedor, CmpEqualId<Proveedor>>
 {
+  using HashTable = HashType<Proveedor, CmpEqualId<Proveedor>>;
+
   TablaProveedores(const char * name)
+    : HashTable(45279, hash_id<Proveedor>, CmpEqualId<Proveedor>())
   {
     ifstream in(name);
     if (in.fail()) 
@@ -337,7 +415,6 @@ struct TablaProveedores : public DynArray<Proveedor>
 
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
-    DynArrayHeap<Proveedor, CmpId<Proveedor>> heap;
     for (size_t i = 0; in.good(); ++i)
       {
 	auto row = csv_read_row(in, ',');
@@ -348,24 +425,19 @@ struct TablaProveedores : public DynArray<Proveedor>
 	auto nac = row(5);
 	if (nac != "V" and nac != "E")
 	  throw domain_error(fmt("Tabla prov: nacion inválida en fila %ld", i));
-	heap.emplace(atol(row(0).c_str()), row(1), row(2), 
-		     atol(row(3).c_str()), atol(row(4).c_str()), nac,
-		     atol(row(6).c_str()));
+	emplace(atol(row(0).c_str()), row(1), row(2), atol(row(3).c_str()), 
+		atol(row(4).c_str()), nac, atol(row(6).c_str()));
       }
-
-    this->reserve(heap.size());
-    for (size_t i = 0; not heap.is_empty(); ++i)
-      this->access(i) = move(heap.getMin());
   }
 
   Proveedor * operator () (Uid id) const
   {
-    auto p = bsearch(*this, Proveedor(id), 
-		     [] (auto p1, auto p2) { return p1.id < p2.id; });
+    auto p = search(Proveedor(id));
     if (p == nullptr)
       throw std::domain_error(fmt("Proveedor id %ld no encontrado", id));
     return p;
   }
 };
+
 
 

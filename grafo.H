@@ -3,8 +3,8 @@
 # include <tpl_dynSetTree.H>
 # include <tpl_agraph.H>
 # include <io_graph.H>
-# include <common.H>
 
+# include <tablas.H>
 
 
 /* Un nodo representa a una planta asociada a un rif o a un proveedor
@@ -31,7 +31,7 @@ struct Nodo
     return make_pair(origen_id, procedencia_id);
   }
   
-  static string rif_extranjero(Uid origen_id, Uid procedencia_id)
+  static string rif_ext(Uid origen_id, Uid procedencia_id)
   {
     stringstream s;
     s << origen_id << " " << procedencia_id;
@@ -47,7 +47,7 @@ struct Nodo
     : rif(r), nombre(nom), extranjero(false) {}
 
   Nodo(Uid origen_id, Uid procedencia_id, const string & nom) 
-    : rif(rif_extranjero(origen_id, procedencia_id)), 
+    : rif(rif_ext(origen_id, procedencia_id)), 
       nombre(nom), extranjero(true) {}
 
   string to_string() const
@@ -103,20 +103,25 @@ struct Arco
 {
   Uid arco_id     = -1;
   string cod_aran = "Sin codigo";
+  Uid producto_id = -1;
   Uid insumo_id   = -1;          // id en la tabla de insumos 
+  double factor   = 0; // cuanto requiere insumo_id para una unidad prod_id
   double cantidad = 0;
   double coste    = 0;
 
   Arco() {}
 
-  Arco(Uid aid, const string & cod, Uid id, double cant, double c)
-    : arco_id(aid), cod_aran(cod), insumo_id(id), cantidad(cant), coste(c) {}
+  Arco(Uid aid, const string & cod, Uid prod_id, Uid ins_id,
+       double fact, double cant, double c)
+    : arco_id(aid), cod_aran(cod), producto_id(prod_id), insumo_id(ins_id),
+      factor(fact), cantidad(cant), coste(c) {}
 
   string to_string() const 
   {
-    return ::to_string(arco_id) + " " + cod_aran + " " 
-      + ::to_string(insumo_id) + 
-      " " + ::to_string(cantidad) + " " + ::to_string(coste);
+    return ::to_string(arco_id) + " " + cod_aran + " " + 
+      ::to_string(producto_id) + " " + ::to_string(insumo_id) + " " +
+      ::to_string(factor) + " " + ::to_string(cantidad) + " " + 
+      ::to_string(coste);
   }
 
   friend ostream & operator << (ostream & out, const Arco & a)
@@ -126,9 +131,8 @@ struct Arco
 
   friend istream & operator >> (istream & in, Arco & a)
   {
-    in >> a.arco_id >> a.cod_aran >> a.insumo_id >> a.cantidad >> a.coste;
-    // cout << a.arco_id << a.cod_aran << a.insumo_id << a.cantidad << a.coste
-    // 	 << endl;
+    in >> a.arco_id >> a.cod_aran >> a.producto_id >> a.insumo_id 
+       >> a.factor >> a.cantidad >> a.coste;
     return in;
   }
 };
@@ -196,7 +200,7 @@ private:
   {
     bool operator () (Node * p1, Node * p2) const noexcept
     {
-      return Nodo::Cmp()(p1->get_info(), p2->get_info());
+      return Nodo::CmpLess()(p1->get_info(), p2->get_info());
     }
   };
 
@@ -212,30 +216,33 @@ private:
     return *ptr;
   }
 
-  Node * target_node(Uid producto_id)
+  pair<Node*, Producto*> target_node(Uid producto_id)
   {
     Producto * producto_ptr = tabla_productos(producto_id);
     assert(producto_ptr->id == producto_id);
     Planta * planta_ptr = tabla_plantas(producto_ptr->planta_id);
     assert(planta_ptr->id == producto_ptr->planta_id);
     auto p = search_node(planta_ptr->rif);
-    if (p != nullptr)
+    if (p == nullptr)
       {
-	assert(p->get_info().rif == planta_ptr->rif);
-	return p;
+	p = g.emplace_node(planta_ptr->rif, planta_ptr->nombre);
+	tabla_nodos.insert(p);
       }
-
-    p = g.emplace_node(planta_ptr->rif, planta_ptr->nombre);
-    tabla_nodos.insert(p);
-    return p;
+    
+    return make_pair(p, producto_ptr);
   }
 
-  pair<DynList<Node*>, string> filter_cod_aran(const DynList<Node*> & l, 
-					       Insumo * insumo_ptr) const
+  //                cod_aran, nombre, cantidad, coste
+  using Fab = tuple<string, string, double, double>;
+
+  // Produce una lista filtrada de los elementos de l que tengan los
+  // rifs asociados al código arancelario de insumo_ptr
+  pair<DynList<Fab>, string> 
+  filter_cod_aran(const DynList<Fab> & l, Insumo * insumo_ptr) const
   {
     const string & cod_aran = insumo_ptr->cod_aran;
     
-    DynSetTree<string> rifs;// Recorre productos asociados codigo arancelario
+    DynSetTree<string> rifs; // Recorre productos asociados codigo arancelario
     auto productos = tabla_productos.por_cod_aran(cod_aran);
     for (auto it = productos.get_it(); it.has_curr(); it.next())
       {
@@ -246,20 +253,17 @@ private:
 	rifs.append(planta_ptr->rif);
       }
 
-    auto ret = l.filter([this, &rifs] (auto p)
-      {
-	const auto & info = p->get_info();
-	if (info.es_extranjero())
-	  return true;
-	return rifs.contains(info.rif);
-      });
+    auto ret = l.filter([&rifs] (auto f) { return rifs.contains(get<0>(f)); });
     
     return make_pair(ret, cod_aran);
   }
 
-  pair<DynList<Node*>, string> source_node(Uid insumo_id)
+  //                            cantidad, coste
+  using SemiArco = tuple<Node*, double, double>;
+
+  // retorna la lista de arcos y el código arancelario
+  pair<DynList<SemiArco>, string> source_node(Uid insumo_id)
   {
-    DynList<Node*> l;
     Insumo * insumo_ptr = tabla_insumos(insumo_id);
     assert(insumo_ptr->id == insumo_id);
     auto provs = tabla_proveedor_insumo(insumo_id);
@@ -269,10 +273,11 @@ private:
 	s << "Insumo id " << insumo_id << " no tiene proveedores declarados "
 	  " para el año " << anho;
 	log.append(s.str());
-	return make_pair(l, "");
+	return make_pair(DynList<SemiArco>(), "");
       }
 
-    // recorre los proveedores del insumo para determinar nodos fuente
+    // recorre los proveedores de insumo y los separa en nacionales y extranj
+    DynList<Fab> nac_list, ext_list;
     for (auto it = provs.get_it(); it.has_curr(); it.next())
       {
 	auto prov = it.get_curr();
@@ -280,7 +285,8 @@ private:
 	Proveedor * prov_ptr = tabla_proveedores(prov->proveedor_id);
 	assert(prov_ptr != nullptr);
 
-	string rif = prov_ptr->rif, nombre = prov_ptr->nombre;
+	const string & rif = prov_ptr->rif;
+	string nombre = prov_ptr->nombre;
 	bool es_extranjero = true;
 	if (prov_ptr->es_nacional())
 	  {
@@ -292,27 +298,48 @@ private:
 		s << "Rif " << prov_ptr->rif << " asociado a proveedor id "
 		  << prov_ptr->id << " no fue encontrado como unid ecom";
 		log.append(s.str());
-		nombre += " **SR";
+		nombre += " **Sin Registro";
 	      }
+	    nac_list.append(make_tuple(rif, move(nombre), 
+				       prov->cantidad, prov->monto));
 	  }
 	else
-	  rif = Nodo::rif_extranjero(prov_ptr->pais_origen_id, 
-				     prov_ptr->pais_procedencia_id);
+	  {
+	    auto t = make_tuple(Nodo::rif_ext(prov_ptr->pais_origen_id, 
+					      prov_ptr->pais_procedencia_id),
+				move(nombre), prov->cantidad, prov->monto);
+	    ext_list.append(move(t));
+	  }
+      }
 
-	Node node(Nodo(es_extranjero, move(rif), move(nombre)));
+    auto par = filter_cod_aran(nac_list, insumo_ptr);
+    auto nac_nodos = par.first.map<SemiArco>([this] (auto & t)
+      {
+	Node node(Nodo(move(get<0>(t)), move(get<1>(t))));
 	auto ptr = tabla_nodos.search(&node);
 	if (ptr != nullptr)
-	  {
-	    l.append(*ptr);
-	    continue;
-	  }
+	  return make_tuple(*ptr, get<2>(t), get<3>(t));
 
 	auto p = g.insert_node(move(node.get_info()));
 	tabla_nodos.insert(p);
-	l.append(p);
-      }
+	return make_tuple(p, get<2>(t), get<3>(t));
+      });
+
+    auto ext_nodos = ext_list.map<SemiArco>([this] (auto & t)
+      {
+	Node node(Nodo(true, move(get<0>(t)), move(get<1>(t))));
+	auto ptr = tabla_nodos.search(&node);
+	if (ptr != nullptr)
+	  return make_tuple(*ptr, get<2>(t), get<3>(t));
+
+	auto p = g.insert_node(move(node.get_info()));
+	tabla_nodos.insert(p);
+	return make_tuple(p, get<2>(t), get<3>(t));
+      });
+
+    nac_nodos.append(ext_nodos); // concatena ext_nodos a nac_nodos
     
-    return filter_cod_aran(l, insumo_ptr);
+    return make_pair(nac_nodos, par.second);
   }
 
   void read_arcs(const char * name)
@@ -325,6 +352,8 @@ private:
     const size_t n = header.size();
     for (size_t i = 0; in.good(); ++i)
       {
+	// if (i % 100000 == 0)
+	//   cout << "i = " << i << endl;
 	auto row = csv_read_row(in, ',');
 	if (row.size() != n)
 	  throw domain_error(fmt("number of fields of row %d is not %d",
@@ -333,26 +362,26 @@ private:
 	  continue;
 
 	const Uid producto_id = atol(row(2).c_str());
-	auto tgt = target_node(producto_id);
+	auto par = target_node(producto_id);
+	auto tgt = par.first;
+	auto producto_ptr = par.second;
 
 	const Uid insumo_id = atol(row(1).c_str());
-	auto par = source_node(insumo_id);
-	// cout << "Sources:" << endl;
-	// par.first.for_each([] (auto p)
-        //   {
-	//     cout << "    " << p->get_info().rif << " "; 
-	//   });
-	// cout << endl;
+	auto lt = source_node(insumo_id);
 
-	for (auto it = par.first.get_it(); it.has_curr(); it.next())
+	Uid arc_id = atol(row(0).c_str());
+	double cantidad = atof(row(4).c_str());
+	string cod_aran = get<1>(lt);
+
+	producto_ptr->comb.insert(insumo_id, cantidad);
+
+	for (auto it = get<0>(lt).get_it(); it.has_curr(); it.next())
 	  {
-	    // auto a = 
-	      g.emplace_arc(it.get_curr(), tgt, atol(row(0).c_str()), 
-				   par.second, insumo_id, 0, 0);
-	    // cout << it.get_curr()->get_info().rif << " [" << a->get_info() 
-	    // 	 << "] " << tgt->get_info().rif << endl;
+	    auto & t = it.get_curr();
+	    g.emplace_arc(get<0>(t), tgt, arc_id, cod_aran,
+			  producto_id, insumo_id, 
+			  cantidad, get<1>(t), get<2>(t));
 	  }
-	// cout << "++++++++++++++++" << endl;
       }
   }
   
