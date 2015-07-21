@@ -54,3 +54,6 @@ test-csv: test-csv.C parse-csv.H
 
 test-io: test-io.C tablas.H grafo.H
 	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ $(LIBS)
+
+transform-data: transform-data.C tablas.H grafo.H
+	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ $(LIBS)

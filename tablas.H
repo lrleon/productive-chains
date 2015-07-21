@@ -439,5 +439,334 @@ struct TablaProveedores : public HashType<Proveedor, CmpEqualId<Proveedor>>
   }
 };
 
+const string BLANK = " ";
+
+inline string rif_ext(Uid origen_id, Uid procedencia_id)
+{
+  stringstream s;
+  s << origen_id << " " << procedencia_id;
+  return s.str();
+}
+
+inline pair<Uid, Uid> pais(const string & rif) 
+{
+  Uid origen_id, procedencia_id;
+  istringstream s(rif);
+  s >> origen_id >> procedencia_id;
+  return make_pair(origen_id, procedencia_id);
+}
+
+struct MetaProducto;
+struct MetaInsumo;
+
+struct TablaMetaProductos;
+struct TablaMetaInsumos;
+
+struct Productor
+{ //                      cod_aran
+  using Prod = tuple<Uid, string>;
+
+  bool nacional;
+  string rif;
+  string nombre;
+  //                    cod_aran
+  DynSetTree<tuple<Uid, string>> productos; // productos que fabrica y/o vende
+
+  Productor() {}
+
+  Productor(bool nac, const string & r, const string & nom)
+    : nacional(nac), rif(r), nombre(nom) {}
+
+  string to_string() const
+  {
+    return (nacional ? "VEN" : "EXT") + BLANK + rif + BLANK + nombre;
+  }
+
+  friend ostream & operator << (ostream & out, const Productor & p)
+  {
+    out << p.nacional << BLANK	<< p.rif << p.nombre << endl
+	<< "    Productos (" << p.productos.size() << "): ";
+    p.productos.for_each([&out] (auto p) 
+      { 
+	out << "(" << get<0>(p) << "," << get<1>(p) << "), ";
+      }); 
+    out << endl;
+    return out;
+  }
+
+  void save(ostream & out) const 
+  {
+    out << nacional << BLANK << rif << endl 
+	<< nombre << endl
+	<< productos.size() << endl;
+    productos.for_each([&out] (auto p) 
+		       { 
+			 out << get<0>(p) << BLANK << get<1>(p) << BLANK;
+		       }); 
+    out << endl;
+  }
+
+  void load(istream & in)
+  {
+    in >> nacional;
+    if (nacional)
+      in >> rif;
+    else
+      {
+	Uid origen_id, procedencia_id;
+	in >> origen_id >> procedencia_id;
+	rif = rif_ext(origen_id, procedencia_id);
+      }
+    getline(in, nombre);
+
+    size_t n;
+    in >> n;
+    for (auto i = 0; i < n; ++i)
+      {
+	Uid id;
+	string cod_aran;
+	in >> id >> cod_aran;
+	productos.append(make_tuple(id, cod_aran));
+      }
+  }
+
+  bool es_nacional() const { return nacional; }
+  bool es_extranjero() const { return not nacional; }
+
+  friend bool operator < (const Productor & p1, const Productor & p2) 
+  {
+    if (p1.es_extranjero() or p2.es_extranjero()) // alguno extranjero?
+      {
+	if (p1.es_nacional())
+	  return true; // n1 Nacional < n2 Extranjero
+	if (p2.es_nacional())
+	  return false; // n1 extranjero > n2 nacional
+	  
+	const auto pais1 = pais(p1.rif);
+	const auto pais2 = pais(p2.rif);
+	if (pais1.first == pais2.first)
+	  return p1.nombre < p2.nombre;
+      }
+    return p1.rif < p2.rif; // Ambos son nacionales
+  }
+};
 
 
+struct MetaProducto
+{
+  Uid id;
+  string cod_aran;
+  string nombre;
+  DynSetTree<string> productores; // lista de rif de propductores 
+  DynMapTree<Uid, double> comb;
+
+  MetaProducto() {}
+  MetaProducto(Uid i, const string & cod, const string & nom, 
+	       const DynMapTree<Uid, double> & c)
+    : id(i), cod_aran(cod), nombre(nom), comb(c) {}
+
+  void save(ostream & out) const
+  {
+    out << id << BLANK << cod_aran << endl
+	<< nombre << endl
+	<< productores.size() << endl;
+    productores.for_each([&out] (auto s) { out << s << endl; }); 
+    out << endl
+	<< comb.size() << endl;
+    comb.for_each([&out] (auto p) { out << p.first << p.second << endl; });
+  }
+
+  void load(istream & in)
+  {
+    in >> id >> cod_aran;
+    getline(in, nombre);
+    size_t n;
+    in >> n;
+    for (auto i = 0; i < n; ++i)
+      {
+	string rif;
+	in >> rif;
+	productores.append(rif);
+      }
+    in >> n;
+    for (auto i = 0; i < n; ++i)
+      {
+	Uid id;
+	double factor;
+	in >> id >> factor;
+	comb.insert(id, factor);
+      }
+  }
+};
+
+struct TablaProductores;
+
+struct TablaMetaProductos : public DynArray<MetaProducto>
+{
+  typedef bool (*CmpCod)(const MetaProducto &, const MetaProducto &);
+  CmpCod cmp_cod = [] (const MetaProducto & p1, const MetaProducto & p2)
+  { return p1.cod_aran < p2.cod_aran; };
+
+  typedef bool (*CmpId)(const MetaProducto &, const MetaProducto &);
+  CmpId cmp_id = [] (const MetaProducto & p1, const MetaProducto & p2)
+  { return p1.id < p2.id; };
+
+  DynArray<MetaProducto*> index;
+
+  inline void adjuntar_productores(const TablaProductores & tabla_productores);
+
+  TablaMetaProductos(const TablaProductos & tabla_productos,
+		     const TablaProductores & tabla_productores)
+  {
+    size_t n = tabla_productos.size();
+    size_t i = 0;
+    reserve(n);
+    tabla_productos.for_each([this, &i] (auto & p)
+      {
+	access(i++) = MetaProducto(p.id, p.cod_aran, p.nombre, p.comb);
+      });
+    in_place_sort(*this, cmp_cod);
+
+    index = build_index_ptr(*this, cmp_id);
+
+    adjuntar_productores(tabla_productores);
+  }
+
+  DynList<MetaProducto*> operator () (const string & cod_aran) const noexcept
+  {
+    MetaProducto p; p.cod_aran = cod_aran;
+    return bsearch_dup(*this, p, cmp_cod);
+  }
+
+  MetaProducto * operator () (Uid id) const noexcept
+  {
+    MetaProducto p; p.id = id;
+    return bsearch(index, p, cmp_id);
+  }
+
+  void save(ostream & out) const
+  {
+    out << size() << endl;
+    for_each([&out] (const auto & p) { p.save(out); });
+  }
+
+  TablaMetaProductos(istream & in)
+  {
+    size_t n;
+    cin >> n;
+    reserve(n);
+    for (auto i = 0; i < n; ++i)
+      access(i).load(in);
+    index = build_index_ptr(*this, cmp_id);
+  }
+};
+
+
+/*
+ * Orden de construcción debe ser *estrictamente* así
+ *
+ * 1. Contruir el grafo. De aquí se calculan los mimebros comb por cada producto
+ *
+ * 2. Construir la tabla de productores
+ *
+ * 3. Construir la tablas de productos
+ *
+ */
+
+struct TablaProductores : DynArray<Productor>
+{
+  void adjuntar_productos(const TablaProductos & tabla_productos,
+			  const TablaPlantas & tabla_plantas)
+  {
+    tabla_productos.for_each([this, &tabla_plantas] (auto & prod)
+      {	
+	auto planta_id = prod.planta_id;
+	auto planta_ptr = tabla_plantas(planta_id);
+	assert(planta_ptr != nullptr);
+	auto productor_ptr = (*this)(planta_ptr->rif);
+	productor_ptr->productos.append(make_pair(prod.id, prod.cod_aran));
+      });
+  }
+
+  TablaProductores(const TablaUnidadesEconomicas & tabla_ue,
+		   const TablaProveedores &        tabla_proveedores,
+		   const TablaProductos &          tabla_productos,
+		   const TablaPlantas &            tabla_plantas)
+  {
+    DynSetTree<Productor> tree;
+
+    // Inserta primero las unidades económicas
+    tabla_ue.for_each([&tree] (const auto & ue)
+      {
+	tree.emplace(true, ue.rif, ue.nombre);
+      });
+
+    // Ahora los proveedores, algunos de los cuales pueden ser unidades
+    // económicas, en cuyo caso ya deberían de estar insertadas
+    tabla_proveedores.for_each([&tree] (const auto & prov)
+      {
+	if (prov.nacional)
+	  {
+	    tree.emplace(true, prov.rif, prov.nombre);
+	    return;
+	  }
+	tree.insert_dup(Productor(false, rif_ext(prov.pais_origen_id,
+						 prov.pais_procedencia_id), 
+				  prov.nombre));
+      });
+    
+    reserve(tree.size()); size_t i = 0;
+    tree.mutable_for_each([this, &i] (auto & prod) 
+			  { access(i++) = move(prod); });
+    tree.empty();
+    
+    adjuntar_productos(tabla_productos, tabla_plantas);
+  }
+  
+  // Solo funciona para los nacionales 
+  Productor * operator () (const string & rif) const
+  {
+    Productor p;
+    p.rif = rif;
+    return bsearch(*this, p);
+  }
+
+  // Solo funciona para los extranjeros
+  DynList<Productor*> operator () (Uid origen_id, Uid procedencia_id) const
+  {
+    Productor p;
+    p.rif = rif_ext(origen_id, procedencia_id);
+    p.nacional = false;
+    return bsearch_dup(*this, p);
+  }
+
+  void save(ostream & out) const
+  {
+    out << size() << endl;
+    for_each([&out] (const auto & p) { p.save(out); });
+  }
+
+  TablaProductores(istream & in)
+  {
+    size_t n;
+    in >> n;
+    reserve(n);
+    for (size_t i = 0; i < n; ++i)
+      access(i).load(in);
+  }
+};
+
+void TablaMetaProductos::adjuntar_productores
+(const TablaProductores & tabla_productores)
+{
+  tabla_productores.for_each([this] (const auto & productor)
+    {
+      productor.productos.for_each([this, &productor] (auto p)
+        {
+	  auto producto_id = get<0>(p);
+	  auto producto_ptr = (*this)(producto_id);
+	  producto_ptr->productores.append(productor.rif);
+	});
+    });
+}
+  
