@@ -6,6 +6,7 @@
 
 # include <tablas.H>
 
+extern bool verbose;
 
 /* Un nodo representa a una planta asociada a un rif o a un proveedor
    extranjero.  
@@ -31,11 +32,9 @@ struct Nodo
     return make_pair(origen_id, procedencia_id);
   }
   
-  static string rif_ext(Uid origen_id, Uid procedencia_id)
+  static string rif_ext(Uid origen_id, Uid procedencia_id, string nombre)
   {
-    stringstream s;
-    s << origen_id << " " << procedencia_id;
-    return s.str();
+    return ::rif_ext(origen_id, procedencia_id, move(nombre));
   }
 
   Nodo(const string & r = "Sin rif") : rif(r) {}
@@ -47,7 +46,7 @@ struct Nodo
     : rif(r), nombre(nom), extranjero(false) {}
 
   Nodo(Uid origen_id, Uid procedencia_id, const string & nom) 
-    : rif(rif_ext(origen_id, procedencia_id)), 
+    : rif(rif_ext(origen_id, procedencia_id, nom)), 
       nombre(nom), extranjero(true) {}
 
   string to_string() const
@@ -64,20 +63,7 @@ struct Nodo
   {
     bool operator () (const Nodo & n1, const Nodo & n2) const noexcept
     {
-      if (n1.es_extranjero() or n2.es_extranjero()) // alguno extranjero?
-	{
-	  if (n1.es_nacional())
-	    return true; // n1 Nacional < n2 Extranjero
-	  if (n2.es_nacional())
-	    return false; // n1 extranjero > n2 nacional
-	  
-	  const auto p1 = n1.pais();
-	  const auto p2 = n2.pais();
-	  if (p1.first == p2.first)
-	    return p1.second < p2.second;
-          return p1.first < p2.first;
-	}
-      return n1.rif < n2.rif; // Ambos son nacionales
+      return n1.rif < n2.rif; 
     }
   };
 
@@ -85,16 +71,7 @@ struct Nodo
   {
     bool operator () (const Nodo & n1, const Nodo & n2) const noexcept
     {
-      if (n1.es_extranjero() or n2.es_extranjero()) // alguno extranjero?
-	{
-	  if (n1.es_nacional() or n2.es_nacional())
-	    return false; 
-	  
-	  const auto p1 = n1.pais();
-	  const auto p2 = n2.pais();
-	  return p1.first == p2.first and p1.second == p2.second;
-	}
-      return n1.rif == n2.rif; // Ambos son nacionales
+      return n1.rif == n2.rif;
     }
   };
 };
@@ -180,8 +157,6 @@ public:
   using Grafo = GrafoSigesic;
   using Node  = Grafo::Node;
   using Arc   = Grafo::Arc;
-
-private:
 
   Grafo g;
 
@@ -306,7 +281,8 @@ private:
 	else
 	  {
 	    auto t = make_tuple(Nodo::rif_ext(prov_ptr->pais_origen_id, 
-					      prov_ptr->pais_procedencia_id),
+					      prov_ptr->pais_procedencia_id,
+					      nombre),
 				move(nombre), prov->cantidad, prov->monto);
 	    ext_list.append(move(t));
 	  }
@@ -348,12 +324,15 @@ private:
     if (in.fail()) 
       throw std::domain_error(fmt("No se pudo abrir %s", name));
 
+    if (::verbose)
+      cout << "Reading arcs ..." << endl;
+
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
     for (size_t i = 0; in.good(); ++i)
       {
-	// if (i % 100000 == 0)
-	//   cout << "i = " << i << endl;
+	if (::verbose and i % 100000 == 0)
+	  cout << "    i = " << i << endl;
 	auto row = csv_read_row(in, ',');
 	if (row.size() != n)
 	  throw domain_error(fmt("number of fields of row %d is not %d",
@@ -405,7 +384,12 @@ public:
 
   void save(ostream & out)
   {
+    if (::verbose) 
+      cout << "Saving graph" << endl;
     IO_Graph<Grafo, Carga_Nodo, Guarda_Nodo>(g).save_in_text_mode(out);
+    if (::verbose)
+      cout << "done!" << endl
+	   << endl;
   }
 };
 

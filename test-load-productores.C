@@ -1,0 +1,20 @@
+
+# include <iostream>
+# include <fstream>
+# include <tclap/CmdLine.h>
+
+# include <tpl_dynArray.H>
+
+# include <tablas.H>
+
+
+using namespace TCLAP;
+
+bool verbose = false;
+
+int main()
+{
+  ifstream in("productores.txt");
+  TablaProductores tbl(in);
+  tbl.save(cout);  
+}

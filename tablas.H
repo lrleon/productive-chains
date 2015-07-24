@@ -5,9 +5,12 @@
 # include <parse-csv.H>
 
 # include <tpl_dynSetHash.H>
+# include <tpl_dynMapTree.H>
 # include <tpl_olhash.H>
 # include <tpl_dynArrayHeap.H>
 # include <ahSort.H>
+
+extern bool verbose;
 
 using Uid = unsigned long;
 
@@ -77,6 +80,9 @@ struct TablaUnidadesEconomicas
     if (in.fail()) 
       throw std::domain_error(fmt("No se pudo abrir %s", name));
 
+    if (::verbose)
+      cout << "Reading economical unities ..." << endl;
+
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
     for (size_t i = 0; in.good(); ++i)
@@ -87,6 +93,9 @@ struct TablaUnidadesEconomicas
 				 row.size(), n));
 	emplace(row(0), row(2));
       }
+    if (::verbose)
+      cout << "done!" << endl
+	   << endl;
   }
 
   TablaUnidadesEconomicas(const char * name) 
@@ -135,6 +144,9 @@ struct TablaPlantas : public HashType<Planta, Planta::CmpEqual>
     if (in.fail()) 
       throw std::domain_error(fmt("No se pudo abrir %s", name));
 
+    if (::verbose)
+      cout << "Reading subeconomical unities" << endl;
+
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
     for (size_t i = 0; in.good(); ++i)
@@ -145,6 +157,9 @@ struct TablaPlantas : public HashType<Planta, Planta::CmpEqual>
 				 row.size(), n));
 	emplace(atol(row(0).c_str()), row(1), row(2));
       }
+    if (::verbose)
+      cout << "Done! " << endl
+	   << endl;
   }
   
   Planta * operator () (Uid id) const
@@ -211,9 +226,12 @@ struct TablaP : public HashType<Producto, Producto::CmpEqual>
     if (in.fail()) 
       throw std::domain_error(fmt("No se pudo abrir %s", name));
 
+    if (::verbose)
+      cout << "Reading " << name << endl;
+
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
-       for (size_t i = 0; in.good(); ++i)
+    for (size_t i = 0; in.good(); ++i)
       {
 	auto row = csv_read_row(in, ',');
 	if (row.size() != n)
@@ -221,6 +239,9 @@ struct TablaP : public HashType<Producto, Producto::CmpEqual>
 				 row.size(), n));
 	emplace(atol(row(0).c_str()), row(1), row(3), atol(row(4).c_str()));
       }
+    if (::verbose)
+      cout << "Done!" << endl
+	   << endl;
   }
 
   void cargar_costes(long anho, const char * costs_name) 
@@ -228,6 +249,9 @@ struct TablaP : public HashType<Producto, Producto::CmpEqual>
     ifstream in(costs_name);
     if (in.fail()) 
       throw std::domain_error(fmt("No se pudo abrir %s", costs_name));
+
+    if (::verbose)
+      cout << "Loading " << costs_name << endl;
 
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
@@ -248,6 +272,9 @@ struct TablaP : public HashType<Producto, Producto::CmpEqual>
 	  
 	emplace(atol(row(0).c_str()), row(1), row(3), atol(row(4).c_str()));
       }
+    if (::verbose)
+      cout << "Done!" << endl
+	   << endl;
   }
 
  Producto * operator () (Uid id) const
@@ -268,11 +295,16 @@ struct TablaProductos : public TablaP
   TablaProductos(const char * prod_name) 
     : TablaP(prod_name), cmp(Producto::CmpLessCodAran())
   {
+    if (::verbose)
+      cout << "    Building index for " << prod_name << endl;
     index.reserve(size());
     size_t i = 0;
     mutable_for_each([this, &i] (auto & p) { index(i++) = &p; });
     in_place_sort(index, [] (auto p1, auto p2)
 		  { return p1->cod_aran < p2->cod_aran; });
+    if (::verbose)
+      cout << "    done!" << endl
+	   << endl;
   }
 
   DynList<Producto*> por_cod_aran(const string & cod_aran) const
@@ -285,14 +317,6 @@ struct TablaProductos : public TablaP
 
 using Insumo = Producto;
 using TablaInsumos = TablaP;
-// struct TablaInsumos : public TablaP
-// {
-//   TablaInsumos(long anho, const char * prod_name, const char * costs_name) 
-//     : TablaP(prod_name)
-//   {
-//     cargar_costes(anho, costs_name);
-//   }
-// };
 
 struct ProveedorInsumo
 {
@@ -337,6 +361,9 @@ struct TablaProveedorInsumo : public DynArray<ProveedorInsumo>
     if (in.fail()) 
       throw std::domain_error(fmt("No se pudo abrir %s", name));
 
+    if (::verbose)
+      cout << "Reading " << name << " for " << anho << endl;
+
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
     DynArrayHeap<ProveedorInsumo, CmpLess> heap;
@@ -358,6 +385,9 @@ struct TablaProveedorInsumo : public DynArray<ProveedorInsumo>
     this->reserve(heap.size());
     for (size_t i = 0; not heap.is_empty(); ++i)
       this->access(i) = move(heap.getMin());
+    if (::verbose)
+      cout << "Done!" << endl
+	   << endl;
   }
 
   DynList<ProveedorInsumo*> operator() (Uid insumo_id) const
@@ -413,6 +443,8 @@ struct TablaProveedores : public HashType<Proveedor, CmpEqualId<Proveedor>>
     if (in.fail()) 
       throw std::domain_error(fmt("No se pudo abrir %s", name));
 
+    if (::verbose)
+      cout << "Reading " << name << endl;
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
     for (size_t i = 0; in.good(); ++i)
@@ -428,6 +460,9 @@ struct TablaProveedores : public HashType<Proveedor, CmpEqualId<Proveedor>>
 	emplace(atol(row(0).c_str()), row(1), row(2), atol(row(3).c_str()), 
 		atol(row(4).c_str()), nac, atol(row(6).c_str()));
       }
+    if (::verbose)
+      cout << "Done! " << endl
+	   << endl;
   }
 
   Proveedor * operator () (Uid id) const
@@ -441,11 +476,12 @@ struct TablaProveedores : public HashType<Proveedor, CmpEqualId<Proveedor>>
 
 const string BLANK = " ";
 
-inline string rif_ext(Uid origen_id, Uid procedencia_id)
+inline string rif_ext(Uid origen_id, Uid procedencia_id, string nombre)
 {
+  replace(nombre.begin(), nombre.end(), ' ', '_');
   stringstream s;
   s << origen_id << " " << procedencia_id;
-  return s.str();
+  return s.str() + " " + nombre;
 }
 
 inline pair<Uid, Uid> pais(const string & rif) 
@@ -484,7 +520,8 @@ struct Productor
 
   friend ostream & operator << (ostream & out, const Productor & p)
   {
-    out << p.nacional << BLANK	<< p.rif << p.nombre << endl
+    out << (p.nacional ? "VEN" : "EXT")
+	<< BLANK	<< p.rif << BLANK << p.nombre << endl
 	<< "    Productos (" << p.productos.size() << "): ";
     p.productos.for_each([&out] (auto p) 
       { 
@@ -498,10 +535,10 @@ struct Productor
   {
     out << nacional << BLANK << rif << endl 
 	<< nombre << endl
-	<< productos.size() << endl;
+	<< productos.size();
     productos.for_each([&out] (auto p) 
-		       { 
-			 out << get<0>(p) << BLANK << get<1>(p) << BLANK;
+		       {
+			 out << BLANK << get<0>(p) << BLANK << get<1>(p);
 		       }); 
     out << endl;
   }
@@ -514,9 +551,11 @@ struct Productor
     else
       {
 	Uid origen_id, procedencia_id;
-	in >> origen_id >> procedencia_id;
-	rif = rif_ext(origen_id, procedencia_id);
+	string nom;
+	in >> origen_id >> procedencia_id >> nom;
+	rif = rif_ext(origen_id, procedencia_id, nom);
       }
+    in.ignore();
     getline(in, nombre);
 
     size_t n;
@@ -535,19 +574,7 @@ struct Productor
 
   friend bool operator < (const Productor & p1, const Productor & p2) 
   {
-    if (p1.es_extranjero() or p2.es_extranjero()) // alguno extranjero?
-      {
-	if (p1.es_nacional())
-	  return true; // n1 Nacional < n2 Extranjero
-	if (p2.es_nacional())
-	  return false; // n1 extranjero > n2 nacional
-	  
-	const auto pais1 = pais(p1.rif);
-	const auto pais2 = pais(p2.rif);
-	if (pais1.first == pais2.first)
-	  return p1.nombre < p2.nombre;
-      }
-    return p1.rif < p2.rif; // Ambos son nacionales
+    return p1.rif < p2.rif;
   }
 };
 
@@ -557,8 +584,21 @@ struct MetaProducto
   Uid id;
   string cod_aran;
   string nombre;
-  DynSetTree<string> productores; // lista de rif de propductores 
+  DynSetTree<string> productores; // lista de rif de productores 
   DynMapTree<Uid, double> comb;
+
+  friend ostream & operator << (ostream & out, const MetaProducto & p) 
+  {
+    out << p.id << BLANK << p.cod_aran << BLANK << p.nombre << endl
+	<< p.productores.size() << " :";
+    p.productores.for_each([&out] (auto s) { out << BLANK << s; });
+    out << endl
+	<< p.comb.size() << " :";
+    p.comb.for_each([&out] (auto c) 
+		    { out << BLANK << c.first << "," << c.second; });
+    out << endl;
+    return out;
+  }
 
   MetaProducto() {}
   MetaProducto(Uid i, const string & cod, const string & nom, 
@@ -569,16 +609,19 @@ struct MetaProducto
   {
     out << id << BLANK << cod_aran << endl
 	<< nombre << endl
-	<< productores.size() << endl;
-    productores.for_each([&out] (auto s) { out << s << endl; }); 
+	<< productores.size();
+    productores.for_each([&out] (auto s) { out << BLANK << s; }); 
     out << endl
-	<< comb.size() << endl;
-    comb.for_each([&out] (auto p) { out << p.first << p.second << endl; });
+	<< comb.size();
+    comb.for_each([&out] (auto p)
+		  { out << BLANK << p.first << BLANK << p.second; });
+    out << endl;
   }
 
   void load(istream & in)
   {
     in >> id >> cod_aran;
+    in.ignore();
     getline(in, nombre);
     size_t n;
     in >> n;
@@ -618,6 +661,8 @@ struct TablaMetaProductos : public DynArray<MetaProducto>
   TablaMetaProductos(const TablaProductos & tabla_productos,
 		     const TablaProductores & tabla_productores)
   {
+    if (::verbose)
+      cout << "Building MetaProdutos table" << endl;
     size_t n = tabla_productos.size();
     size_t i = 0;
     reserve(n);
@@ -625,9 +670,19 @@ struct TablaMetaProductos : public DynArray<MetaProducto>
       {
 	access(i++) = MetaProducto(p.id, p.cod_aran, p.nombre, p.comb);
       });
+
+    if (::verbose)
+      cout << "Done!" << endl
+	   << "    Sorting" << endl;
     in_place_sort(*this, cmp_cod);
+    if (::verbose)
+      cout << "    done!" << endl
+	   << "    Building index ... " << endl;
 
     index = build_index_ptr(*this, cmp_id);
+
+    if (::verbose)
+      cout << "    done!" << endl;
 
     adjuntar_productores(tabla_productores);
   }
@@ -646,19 +701,40 @@ struct TablaMetaProductos : public DynArray<MetaProducto>
 
   void save(ostream & out) const
   {
+    if (::verbose)
+      cout << "Saving Productos" << endl;
     out << size() << endl;
     for_each([&out] (const auto & p) { p.save(out); });
+    if (::verbose)
+      cout << "done!" << endl;
   }
 
   TablaMetaProductos(istream & in)
   {
     size_t n;
-    cin >> n;
+    in >> n;
     reserve(n);
     for (auto i = 0; i < n; ++i)
       access(i).load(in);
     index = build_index_ptr(*this, cmp_id);
   }
+
+  void autotest() const
+  {
+    const size_t n = size();
+    for (auto i = 0; i < n; ++i)
+      {
+	auto p = access(i);
+	auto cod_aran = p.cod_aran;
+	auto l = (*this)(cod_aran);
+	if (not l.all([&cod_aran] (auto p) { return p->cod_aran == cod_aran; }))
+	  {
+	    cout << "Para producto" << endl
+		 << p << endl;
+	    ERROR("Una de las entradas tiene cod_aran diferente");
+	  }
+      }
+  } 
 };
 
 
@@ -673,11 +749,13 @@ struct TablaMetaProductos : public DynArray<MetaProducto>
  *
  */
 
-struct TablaProductores : DynArray<Productor>
+struct TablaProductores : public DynArray<Productor>
 {
   void adjuntar_productos(const TablaProductos & tabla_productos,
 			  const TablaPlantas & tabla_plantas)
   {
+    if (::verbose)
+      cout << "    Computing products for each producer ..." << endl;
     tabla_productos.for_each([this, &tabla_plantas] (auto & prod)
       {	
 	auto planta_id = prod.planta_id;
@@ -686,6 +764,8 @@ struct TablaProductores : DynArray<Productor>
 	auto productor_ptr = (*this)(planta_ptr->rif);
 	productor_ptr->productos.append(make_pair(prod.id, prod.cod_aran));
       });
+    if (::verbose)
+      cout << "    done" << endl;
   }
 
   TablaProductores(const TablaUnidadesEconomicas & tabla_ue,
@@ -693,6 +773,10 @@ struct TablaProductores : DynArray<Productor>
 		   const TablaProductos &          tabla_productos,
 		   const TablaPlantas &            tabla_plantas)
   {
+    if (::verbose)
+      cout << "Building Productors table" << endl
+	   << "    Reading econimical unities ... " << endl;
+
     DynSetTree<Productor> tree;
 
     // Inserta primero las unidades económicas
@@ -700,6 +784,10 @@ struct TablaProductores : DynArray<Productor>
       {
 	tree.emplace(true, ue.rif, ue.nombre);
       });
+    
+    if (::verbose)
+      cout << "    done" << endl
+	   << "    Reading suppliers ... " << endl;
 
     // Ahora los proveedores, algunos de los cuales pueden ser unidades
     // económicas, en cuyo caso ya deberían de estar insertadas
@@ -710,14 +798,23 @@ struct TablaProductores : DynArray<Productor>
 	    tree.emplace(true, prov.rif, prov.nombre);
 	    return;
 	  }
-	tree.insert_dup(Productor(false, rif_ext(prov.pais_origen_id,
-						 prov.pais_procedencia_id), 
-				  prov.nombre));
+	tree.insert(Productor(false, rif_ext(prov.pais_origen_id,
+					     prov.pais_procedencia_id,
+					     prov.nombre), 
+			      prov.nombre));
       });
+
+    if (::verbose)
+      cout << "    done" << endl
+	   << "    building the table ... " << endl;
     
     reserve(tree.size()); size_t i = 0;
     tree.mutable_for_each([this, &i] (auto & prod) 
 			  { access(i++) = move(prod); });
+
+    if (::verbose)
+      cout << "    done" << endl;
+
     tree.empty();
     
     adjuntar_productos(tabla_productos, tabla_plantas);
@@ -731,19 +828,38 @@ struct TablaProductores : DynArray<Productor>
     return bsearch(*this, p);
   }
 
-  // Solo funciona para los extranjeros
-  DynList<Productor*> operator () (Uid origen_id, Uid procedencia_id) const
+  // Determina el índice en la tabla de la entrada ptr
+  size_t operator () (Productor * ptr) const
   {
-    Productor p;
-    p.rif = rif_ext(origen_id, procedencia_id);
-    p.nacional = false;
-    return bsearch_dup(*this, p);
+    long ret;
+    if (ptr->es_nacional())
+      {
+	ret = binary_search(*this, *ptr);
+	if (ret < 0)
+	  throw domain_error("TablaProductores (): productor no encontrado");
+	assert(ptr == &access(ret));
+	return ret;
+      }
+
+    auto l = binary_search_dup(*this, *ptr).filter([this, ptr] (auto i)
+      {
+	return &access(i) == ptr;
+      });
+    if (l.is_empty())
+      throw domain_error("TablaProductores (): productor ext no encontrado");
+
+    assert(&access(l.get_first()) == ptr);
+    return l.get_first();
   }
 
   void save(ostream & out) const
   {
+    if (::verbose)
+      cout << "Saving Productores" << endl;
     out << size() << endl;
     for_each([&out] (const auto & p) { p.save(out); });
+    if (::verbose)
+      cout << "done!" << endl;
   }
 
   TablaProductores(istream & in)
@@ -754,11 +870,31 @@ struct TablaProductores : DynArray<Productor>
     for (size_t i = 0; i < n; ++i)
       access(i).load(in);
   }
+
+  void autotest() const
+  {
+    if (not is_sorted(*this))
+      ERROR("autotest: not sorted");
+
+    for (size_t i = 0, n = size(); i < n; ++i)
+      {
+	auto p = access(i);
+	if ((*(this))(p.rif) == nullptr)
+	  {
+	    cout << "Productor" << endl
+		 << p << endl
+		 << "    NO ENCONTRADO" << endl;
+	    ERROR("");
+	  }
+      }
+  }
 };
 
 void TablaMetaProductos::adjuntar_productores
 (const TablaProductores & tabla_productores)
 {
+  if (::verbose)
+    cout << "    Computing producer for each product ... " << endl;
   tabla_productores.for_each([this] (const auto & productor)
     {
       productor.productos.for_each([this, &productor] (auto p)
@@ -768,5 +904,8 @@ void TablaMetaProductos::adjuntar_productores
 	  producto_ptr->productores.append(productor.rif);
 	});
     });
+  if (::verbose)
+    cout << "    done" << endl
+	 << endl;
 }
   

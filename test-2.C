@@ -8,6 +8,8 @@
 
 using namespace TCLAP;
 
+bool verbose = false;
+
 
 int main()
 {
