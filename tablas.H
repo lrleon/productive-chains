@@ -711,16 +711,23 @@ struct TablaMetaProductos : public DynArray<MetaProducto>
 
   TablaMetaProductos(istream & in)
   {
+    if (::verbose)
+      cout << "Loading MetaProductos" << endl;
     size_t n;
     in >> n;
     reserve(n);
     for (auto i = 0; i < n; ++i)
       access(i).load(in);
     index = build_index_ptr(*this, cmp_id);
+    if (::verbose)
+      cout << "end" << endl
+	   << endl;
   }
 
   void autotest() const
   {
+    if (::verbose)
+      cout << "Checking productos consistency" << endl;
     const size_t n = size();
     for (auto i = 0; i < n; ++i)
       {
@@ -733,7 +740,17 @@ struct TablaMetaProductos : public DynArray<MetaProducto>
 		 << p << endl;
 	    ERROR("Una de las entradas tiene cod_aran diferente");
 	  }
+	
+	if ((*this)(p.id) == nullptr)
+	  {
+	    cout << "Para producto" << endl
+		 << p << endl;
+	    ERROR("id no encontrado");
+	  }
       }
+    if (::verbose)
+      cout << "done! " << endl
+	   << endl;
   } 
 };
 
@@ -864,21 +881,28 @@ struct TablaProductores : public DynArray<Productor>
 
   TablaProductores(istream & in)
   {
+    if (::verbose)
+      cout << "Loading Productores" << endl;
     size_t n;
     in >> n;
     reserve(n);
     for (size_t i = 0; i < n; ++i)
       access(i).load(in);
+    if (::verbose)
+      cout << "done" << endl 
+	   << endl;
   }
 
   void autotest() const
   {
+    if (::verbose)
+      cout << "Checking for producers consistency" << endl;
     if (not is_sorted(*this))
       ERROR("autotest: not sorted");
 
     for (size_t i = 0, n = size(); i < n; ++i)
       {
-	auto p = access(i);
+	auto & p = access(i);
 	if ((*(this))(p.rif) == nullptr)
 	  {
 	    cout << "Productor" << endl
@@ -886,7 +910,18 @@ struct TablaProductores : public DynArray<Productor>
 		 << "    NO ENCONTRADO" << endl;
 	    ERROR("");
 	  }
+	if ((*this)(&p) != i)
+	  {
+	    cout << "Indice de Productor dado puntero" << endl
+		 << p << endl
+		 << "    mal cualculado" << endl;
+	    ERROR("");
+	  }
       }
+
+    if (::verbose)
+      cout << "done" << endl
+	   << endl;
   }
 };
 

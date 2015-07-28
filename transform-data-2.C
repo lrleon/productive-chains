@@ -2,7 +2,7 @@
 # include <tclap/CmdLine.h>
 # include <net.H>
 
-bool verbose = true;
+bool verbose = false;
 
 using namespace TCLAP;
 
@@ -13,10 +13,12 @@ void process_comand_line(int argc, char *argv[])
   SwitchArg verbose("v", "verbose", "verbose mode", true);
   cmd.add(verbose);
 
+  SwitchArg test("t", "test", "test for consistency", true);
+
 	/***************** Archivos de salida ****************/
   ValueArg<string> meta("m", "meta-data", "nombre archivo de archivo data", 
-			false, "meta-data.txt", 
-			"nombre de archivo donde se escribirán los datos");
+			false, "data.txt", 
+			"nombre de archivo dónde se escribirán los datos");
   cmd.add(meta);
 
        /****************** Archivos de entrada ****************/
@@ -36,6 +38,10 @@ void process_comand_line(int argc, char *argv[])
   cmd.parse(argc, argv);
   ::verbose = verbose.getValue();
 
+  ofstream out(meta.getValue());
+  if (out.fail())
+    throw domain_error(fmt("No puedo abrir %s", meta.getValue().c_str()));
+
   ifstream gstream(grafo.getValue());
   GrafoSigesic g = cargar_grafo(gstream);
 
@@ -46,34 +52,23 @@ void process_comand_line(int argc, char *argv[])
   TablaProductores tabla_productores(productores_stream);
 
   tabla_productores.autotest();
-  tabla_productores.save(cout);
+  tabla_productores.save(out);
 
+  ifstream productos_stream(productos.getValue());
+  if (productos_stream.fail())
+    throw domain_error(fmt("No puedo abrir %s", productos.getValue().c_str()));
+  TablaMetaProductos tabla_productos(productos_stream);
+
+  tabla_productos.autotest();
+  tabla_productos.save(out);  
+    
   Net net = build_net(g, tabla_productores);
 
-  save_net(net, tabla_productores, cout);
-  
-  clear_graph(g);
-
-
-
-  // tabla_productores.save(productores_out);
-
-  // ofstream productos_out(pname.getValue());
-  // if (productos_out.fail())
-  //   throw domain_error(fmt("No puedo crear %s", pname.getValue().c_str()));
-  // TablaMetaProductos tabla_productos(mapa.tabla_productos, tabla_productores);
-  // tabla_productos.save(productos_out);
+  save_net(net, tabla_productores, out);
 }
 
 
 int main(int argc, char *argv[])
 {
   process_comand_line(argc, argv);
-  // Mapa mapa(2012, "unidad_economica.csv",
-  // 	    "unidadecon_subunidad_economica.csv",
-  // 	    "produccion_producto.csv", "produccion_insumo.csv", 
-  // 	    "cmproveedores_proveedorinsumo.csv", "cmproveedores_proveedor.csv",
-  // 	    "produccion_producto_t_insumo.csv");
-
-  // mapa.save(cout);
 }

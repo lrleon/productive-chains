@@ -5,6 +5,10 @@ CLANGPATH = /home/lrleon/LLVM-3.6.1/bin
 CXX = $(CLANGPATH)/clang++
 CC = $(CLANGPATH)/clang
 
+FFLAGS=
+
+FLEX=flex ${FFLAGS}
+
 WARN = -Wall -Wextra -Wcast-align -Wno-sign-compare -Wno-write-strings \
        -Wno-parentheses -Wno-invalid-source-encoding
 
@@ -17,10 +21,10 @@ INCLUDE = -I. -I $(ALEPH)
 LIBS = -L $(ALEPH) \
        -lAleph -lnana -lm -lgsl -lgslcblas -lgmp -lmpfr -lasprintf -lpthread -lc
 
-all: test test-1 test-2 test-3 test-io transform-data transform-data-op
+all: test test-1 test-2 test-3 test-io test-1-op test-2-op test-3-op transform-data transform-data-op transform-data-2 transform-data-2-op test-load-grafo test-load-productores test-load-productos load-net repl test-net test-lex
 
 clean:
-	rm -f test testcsv test-1 test-2 test-3 test-1-op test-2-op test-3-op test-io transform-data transform-data-op transform-data-2 transform-data-2-op
+	rm -f test testcsv test-1 test-2 test-3 test-1-op test-2-op test-3-op test-io transform-data transform-data-op transform-data-2 transform-data-2-op test-load-grafo test-load-productores test-load-productos load-net repl net-lex.C test-net test-lex
 
 csvparser.o: csvparser.h csvparser.c
 	$(CC) $(INCLUDE) $*.c -g -O0 -c
@@ -76,3 +80,17 @@ test-load-productos: test-load-productos.C tablas.H grafo.H net.H
 test-load-productores: test-load-productores.C tablas.H grafo.H net.H
 	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ $(LIBS)
 
+load-net: load-net.C tablas.H grafo.H net.H
+	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ $(LIBS)
+
+net-lex.C: net-lex.lex
+	${FLEX} -o net-lex.C net-lex.lex 
+
+test-lex: test-lex.C net-lex.C
+	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ -lfl -lreadline $(LIBS)
+
+repl: repl.C tablas.H grafo.H net.H
+	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ -lreadline $(LIBS)
+
+test-net: test-net.C tablas.H grafo.H net.H
+	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ $(LIBS)
