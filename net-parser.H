@@ -4,11 +4,13 @@
 # include <string>
 # include <iostream>
 
+# include <net-tree.H>
+
 using namespace std;
 
 enum TokenType
   {
-    LOAD = 256, EXIT, RIF, COD, VARNAME, ID, STRCONST, ERROR
+    LOAD = 256, SAVE, EXIT, RIF, COD, VARNAME, ID, STRCONST, ERROR
   };
 
 typedef union YYSTYPE
