@@ -1,61 +1,93 @@
 %{
 
+# include <net-parser.H> 
+
+/* # include <iostream> */
+/*   using namespace std; */
+
 extern int get_input(char *buf, int size);
 # undef YY_INPUT
 # define YY_INPUT(buf,result,max_size) result = get_input(buf, max_size);
 
- bool error_found = false;
+ int yylex(void);
+ void yyerror(char const *);
+
+ /* bool error_found = false; */
+
+ /* CommandList * command_list; */
+
+ /* using CommandListPtr = CommandList*; */
+ /* using CommandPtr = Command*; */
 
 %}
 
+/* %union { */
+/*   char * symbol; */
+/*   char * error_msg; */
+/* }; */
+
+%token LOAD SAVE RIF COD EXIT STRCONST VARNAME
+/* %token <symbol> STRCONST */
+/* %token <symbol> VARNAME  */
+
+/* %type <symbol> cmd_unit */
+
 %%
 
-%token LOAD SAVE RIF COD EXIT VARNAME ID STRCONST ERROR
-
-execute: cmd_list '\n' {
-  $$=NULL;
-  errfnd=false;
-  YYACCEPT
-    }
+input: line
 ;
 
-
-cmd_list: cmd_list1 {
-  $$=NULL;
- }
-| cmd_list1 ';' {
-  $$=NULL;
+line: cmd_unit '\n'
+  {
+    cout << "PARSED LINE" << endl; 
   }
+;  
+
+cmd_unit: LOAD STRCONST
+{
+  cout << "LOAD" << endl;
+}
+        | SAVE STRCONST 
+{
+  cout << "SAVE" << endl;
+}
 ;
 
-cmd_list1: cmd_list1 ';' cmd_unit {
-  $$=NULL;
- }
-| cmd_list1 ';' error {
-  error_found = true;
-  $$ = NULL;
-  yyclearin;
-  YYRECOVERING();
-  }
-| cmd_unit {
-  $$=NULL;
-  }
-| error  {
-  if(not error_found)
+%%
+
+void yyerror(char const * s) 
+{
+  cout << "ERROR " << s << " " << endl;
+}
+
+
+int yylex()
+{
+  static int count = 0;
+  switch (count++)
     {
-      errfnd=true;
+    case 0: cout << "LOAD" << endl; return LOAD;
+    case 1: cout << "STRCONST" << endl; return STRCONST;
+    case 2: cout << "EOL" << endl; return '\n';
+    default: cout << "EOF" << endl; return EOF;
     }
-  yyclearin;
-  YYRECOVERING();
-  $$=NULL;
-  }
-;
+}
 
-cmd_unit: LOAD STRCONST {
-  $$ = new Load($1);
- }
-| SAVE STRCONST {
-  $$ = new Save($1);
- }
+int main()
+{
+  
+   /* while (true) */
+   /*   { */
+      /* char * line = // readline("> "); */
+      /* 	"Load \"name\"\n\n"; */
 
-%%
+      /* YY_BUFFER_STATE bp = yy_scan_string(line); */
+      /* yy_switch_to_buffer(bp); */
+
+       int status = yyparse();
+
+       cout << "STATUS = " << status << endl;
+
+      /* yy_delete_buffer(bp); */
+    // }
+}

@@ -1,4 +1,7 @@
 
+# ifndef GRAFO_H
+# define GRAFO_H
+
 # include <tpl_sort_utils.H>
 # include <tpl_dynSetTree.H>
 # include <tpl_agraph.H>
@@ -7,6 +10,7 @@
 # include <tablas.H>
 
 extern bool verbose;
+extern size_t verbose_cycles;
 
 /* Un nodo representa a una planta asociada a un rif o a un proveedor
    extranjero.  
@@ -331,7 +335,7 @@ public:
     const size_t n = header.size();
     for (size_t i = 0; in.good(); ++i)
       {
-	if (::verbose and i % 100000 == 0)
+	if (::verbose and i % verbose_cycles == 0)
 	  cout << "    i = " << i << endl;
 	auto row = csv_read_row(in, ',');
 	if (row.size() != n)
@@ -393,17 +397,9 @@ public:
   }
 };
 
-void guardar_grafo(GrafoSigesic & g, ostream & out)
-{
-  IO_Graph<GrafoSigesic, Carga_Nodo, Guarda_Nodo>(g).save_in_text_mode(out);
-}
+extern void guardar_grafo(GrafoSigesic & g, ostream & out);
+
+extern GrafoSigesic cargar_grafo(istream & in);
 
 
-GrafoSigesic cargar_grafo(istream & in)
-{
-  GrafoSigesic g;
-  
-  IO_Graph<GrafoSigesic, Carga_Nodo, Guarda_Nodo>(g).load_in_text_mode(in);
-
-  return g;
-}
+# endif // GRAFO_H

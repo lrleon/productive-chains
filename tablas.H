@@ -291,7 +291,7 @@ struct TablaProductos : public TablaP
 {
   DynArray<Producto*> index;
   Producto::CmpLessCodAran cmp;
-  
+
   TablaProductos(const char * prod_name) 
     : TablaP(prod_name), cmp(Producto::CmpLessCodAran())
   {
@@ -658,6 +658,8 @@ struct TablaMetaProductos : public DynArray<MetaProducto>
 
   inline void adjuntar_productores(const TablaProductores & tabla_productores);
 
+  TablaMetaProductos() {}
+
   TablaMetaProductos(const TablaProductos & tabla_productos,
 		     const TablaProductores & tabla_productores)
   {
@@ -784,6 +786,8 @@ struct TablaProductores : public DynArray<Productor>
     if (::verbose)
       cout << "    done" << endl;
   }
+
+  TablaProductores() {}
 
   TablaProductores(const TablaUnidadesEconomicas & tabla_ue,
 		   const TablaProveedores &        tabla_proveedores,

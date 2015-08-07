@@ -4,6 +4,8 @@
 
 bool verbose = true;
 
+size_t verbose_cycles;
+
 using namespace TCLAP;
 
 void process_comand_line(int argc, char *argv[])
@@ -77,8 +79,15 @@ void process_comand_line(int argc, char *argv[])
   ValueArg<long> anho("A", "anho", "año de estudio", false, 2012,
 		      "Año para el cual se desea transformar la data");
 
+  ValueArg<size_t> feedback("f", "feedback", "Num de iteraciones en verbose",
+			    false, 10000, 
+			    "Número de lecturas de arcos para imprimir avance");
+  cmd.add(feedback);
+
   cmd.parse(argc, argv);
   ::verbose = verbose.getValue();
+
+  verbose_cycles = feedback.getValue();
 
   Mapa mapa(anho.getValue(), unidad_economica.getValue().c_str(),
 	    subunidad_economica.getValue().c_str(), 

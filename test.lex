@@ -1,4 +1,4 @@
- /*
+/*
  *  The scanner definition for NET.
  */
 
@@ -10,14 +10,15 @@
 
 %{
 
-# include <net-parser.H> 
-# include "net.tab.h"
+# include <tclap/CmdLine.h>
+# include <net-parser.H>
+# include <net-symtbl.H>
+# include "test.tab.h"
 
-
-  YYSTYPE netyylval;
   size_t curr_lineno = 0;
 
-# define yylval netyylval
+  StringTable string_table;
+  IdTable id_table;
 
 /* Max size of string constants */
 # define MAX_STR_CONST 4097
@@ -25,40 +26,26 @@
 # define YY_NO_UNPUT   /* keep g++ happy */
 
 
+  char string_buf[MAX_STR_CONST]; /* to assemble string constants */
+  char *string_buf_ptr = string_buf;
 
-/* define YY_INPUT so we read thorugh readline */
-/* # undef YY_INPUT */
-/* # define YY_INPUT(buf, result, max_size) result = get_input(buf, max_size); */
+  bool string_error = false;
 
-
-char string_buf[MAX_STR_CONST]; /* to assemble string constants */
-char *string_buf_ptr = string_buf;
-
-
-
-/*
- *  Add Your own definitions here
- */
-
- long nested_comment_counter = 0;
-
- bool string_error = false;
-
- inline bool put_char_in_buf(char c)
- {
-   if (string_buf_ptr == &string_buf[MAX_STR_CONST - 1])
-     {
-       yylval.error_msg = "String constant too long";
-       string_error = true;
-       return false;
-     }
-   *string_buf_ptr++ = c;
-   return true;
- }
+  inline bool put_char_in_buf(char c)
+  {
+    if (string_buf_ptr == &string_buf[MAX_STR_CONST - 1])
+      {
+	yylval.error_msg = "String constant too long";
+	string_error = true;
+	return false;
+      }
+    *string_buf_ptr++ = c;
+    return true;
+  }
 
 %}
 
-%x NESTED_COMMENT SINGLE_COMMENT STRING
+%x STRING
 
 /*
  * Define names for regular expressions here.
@@ -66,41 +53,36 @@ char *string_buf_ptr = string_buf;
 /* Keywords */
 LOAD         [lL][oO][aA][dD]
 SAVE         [sS][aA][vV][eE]
-RIF          [rR][iI][fF]
-COD          [cC][oO][dD]
 EXIT         [eE][xX][iI][tT]
+INFO         [iI][nN][fF][oO]
 
-DIGIT           [0-9]
-UPPER_LETTER    [A-Z]
-LOWER_LETTER    [a-z]
-ANY_LETTER      ({UPPER_LETTER}|{LOWER_LETTER})
 SPACE           [ \f\r\t\v]
-NEWLINE         \n
 
-INTEGER         {DIGIT}+
+INTEGER         [[:digit:]]+
 ID              {INTEGER}
-VARNAME         {ANY_LETTER}([_\.-]|{ANY_LETTER}|{DIGIT})*
+VARNAME         [[:alpha:]][[:alnum:]_.-]*
 
 %%
 
-{SPACE}  { cout << "SPACE" << endl; /* Ignore spaces */ }
+{SPACE}  /* Ignore spaces */ 
 
-{NEWLINE} { ++curr_lineno; cout << "MATCH NEWLINE" << endl; return NEWLINE; }
+\n { ++curr_lineno; return '\n'; }
 
  /*
   * Keywords are case-insensitive except for the values true and false,
   * which must begin with a lower-case letter.
   */
-{LOAD}       { cout << "MATCH LOAD" << endl; return LOAD; }
+{LOAD}       return LOAD; 
 {SAVE}       return SAVE;
-{RIF}        return RIF;
-{COD}        return COD;
 {EXIT}       return EXIT;
+{INFO}       return INFO;
 
  /*
   * The single-characters tokens 
   */
 [=;]          return *yytext;
+"["           return *yytext;
+"]"           return *yytext;
 
 
  /*
@@ -145,7 +127,7 @@ VARNAME         {ANY_LETTER}([_\.-]|{ANY_LETTER}|{DIGIT})*
   string_error = true;
   return ERROR;
  }
-<STRING>{NEWLINE} {
+<STRING>'\n' {
   BEGIN(INITIAL);
   ++curr_lineno;
   yylval.error_msg = "Unterminated string constant";
@@ -156,8 +138,7 @@ VARNAME         {ANY_LETTER}([_\.-]|{ANY_LETTER}|{DIGIT})*
   BEGIN(INITIAL);  
   if (not string_error)
     {
-      yylval.symbol = strdup(string_buf); // TODO: ojo con este memory leak
-      cout << "MATCH STRCONST" << endl;
+      yylval.symbol = string_table.addstring(string_buf);
       return STRCONST;
     }
  }
@@ -176,23 +157,19 @@ VARNAME         {ANY_LETTER}([_\.-]|{ANY_LETTER}|{DIGIT})*
   return ERROR;
  }
 
-{ID} { // matches integer constant 
-  yylval.symbol = yytext;
-  return ID;  
+{INTEGER} { // matches integer constant 
+  yylval.symbol = id_table.addstring(yytext);
+  assert(yylval.symbol);
+  return INTCONST;  
 }
 
 {VARNAME} {
-  yylval.symbol = yytext;
+  yylval.symbol = string_table.addstring(yytext);
+  assert(yylval.symbol);
   return VARNAME;
 }
 
-"*)" {
-  yylval.error_msg = "Unmatched *)";
-  return ERROR;
-}
-
 . {
-  cout << "LEX ERROR" << endl;
   yylval.error_msg = yytext;
   return ERROR; 
  }
@@ -203,4 +180,65 @@ VARNAME         {ANY_LETTER}([_\.-]|{ANY_LETTER}|{DIGIT})*
 int yywrap()
 {
   return 1;
+}
+
+extern int yyparse();
+
+string get_prompt(size_t i)
+{
+  stringstream s;
+  s << i << " > ";
+  return s.str();
+}
+
+extern int yydebug;
+
+bool verbose = true;
+
+using namespace TCLAP;
+
+void process_comand_line(int argc, char *argv[])
+{
+  CmdLine cmd("repl", ' ', "0.0");
+
+  SwitchArg verbose("v", "verbose", "verbose mode", true);
+  cmd.add(verbose);
+
+  cmd.parse(argc, argv);
+  ::verbose = verbose.getValue();
+}
+
+extern ASTList * line_commands;
+
+int main()
+{
+# ifdef YYDEBUG
+  yydebug = 1;
+# endif
+  for (size_t i = 0; true;) 
+     {
+       string prompt = get_prompt(i);
+       char * line =  readline(prompt.c_str());
+       if (line == nullptr)
+	 break;
+
+       YY_BUFFER_STATE bp = yy_scan_string(line);
+       yy_switch_to_buffer(bp);
+
+       int status = yyparse();
+
+       if (status == 0)
+	 {
+	   cout << "line correctly parsed" << endl;
+	   ++i;
+	   if (line_commands != nullptr)
+	     line_commands->for_each([] (auto c) { c->execute(); });
+	   cout << endl;
+	 }
+       
+       add_history(line);
+
+       free(line);
+       yy_delete_buffer(bp);
+     }
 }
