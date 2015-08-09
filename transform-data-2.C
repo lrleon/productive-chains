@@ -17,7 +17,7 @@ void process_comand_line(int argc, char *argv[])
 
 	/***************** Archivos de salida ****************/
   ValueArg<string> meta("m", "meta-data", "nombre archivo de archivo data", 
-			false, "data.txt", 
+			false, "mapa.txt", 
 			"nombre de archivo dónde se escribirán los datos");
   cmd.add(meta);
 

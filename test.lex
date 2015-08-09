@@ -55,6 +55,8 @@ LOAD         [lL][oO][aA][dD]
 SAVE         [sS][aA][vV][eE]
 EXIT         [eE][xX][iI][tT]
 INFO         [iI][nN][fF][oO]
+LS           [lL][sS]
+RM           [rR][mM]
 
 SPACE           [ \f\r\t\v]
 
@@ -76,6 +78,8 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
 {SAVE}       return SAVE;
 {EXIT}       return EXIT;
 {INFO}       return INFO;
+{LS}         return LS;
+{RM}         return RM;
 
  /*
   * The single-characters tokens 
@@ -232,7 +236,11 @@ int main()
 	   cout << "line correctly parsed" << endl;
 	   ++i;
 	   if (line_commands != nullptr)
-	     line_commands->for_each([] (auto c) { c->execute(); });
+	     {
+	       line_commands->for_each([] (auto c) { c->execute(); });
+	       delete line_commands;
+	       line_commands = nullptr;
+	     }
 	   cout << endl;
 	 }
        

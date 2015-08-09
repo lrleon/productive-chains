@@ -23,30 +23,33 @@ struct Table : private DynSetHash<string>
 using StringTable = Table;
 using IdTable = Table;
 
-struct SymbolTable : private DynMapHash<string, Varname*>
+struct SymbolTable : public DynMapHash<string, Varname*>
 {
-  Varname * operator () (char * str) const 
+  Varname * operator () (const string & str) const // busqueda
   {
-    auto p = search(string(str));
+    auto p = search(str);
     if (p == nullptr)
       return nullptr;
     return p->second;
   }
 
-  Varname * operator () (const string & str) const
-  {
-    return (*this)((char*) str.c_str());
-  }
-
-  void addvar(const string & name, Varname * var)
+  Varname * addvar(const string & name, Varname * var)
   {
     assert(search(name) == nullptr);
     insert(name, var);
+    return var;
   }
 
   ~SymbolTable()
   {
     this->for_each([] (auto p) { delete p.second; });
+  }
+
+  void rmvar(const string & name) 
+  { 
+    auto & var = find(name);
+    delete var;
+    remove_by_data(var);
   }
 };
 

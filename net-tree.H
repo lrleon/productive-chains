@@ -53,8 +53,8 @@ struct ASTList : public DynList<ASTNode*>
 
 struct Exp : public ASTNode
 {
-  enum Type { GRAPH, LIST, STRCONST, ID, VAR, ASSIGN, INFO } type;
-  void * result = nullptr;
+  enum Type { GRAPH, LIST, STRCONST, INTCONST, VAR, ASSIGN, INFO, LS, RM, 
+	      SEARCH, ERROR } type;
 
   string type_string() const
   {
@@ -63,25 +63,41 @@ struct Exp : public ASTNode
       case GRAPH: return string("GRAPH");
       case LIST: return string("LIST");
       case STRCONST: return string("STRCONST");
-      case ID: return string("ID");
+      case INTCONST: return string("INTCONST");
       case VAR: return string("VAR");
       case ASSIGN: return string("ASSIGN");
+      case INFO: return string("INFO");
+      case LS: return string("LS");
+      case RM: return string("RM");
+      case SEARCH: return string("SEARCH");
       default:
 	ERROR("Tipo de expresion invalido");
       }
+    return string("INVALID");
   }
 
   Exp(Type t) : type(t) { }
 
   ExecStatus execute() 
   { 
-    WARNING("StringEpx: execute method called"); return ExecStatus(); 
+    ERROR("Epx: execute method called"); return ExecStatus(); 
   }
 
   ostream & trace(ostream & out) const { return out << "Exp "; }
+};
 
-  // TODO: exportar un void* al resultado cuya responsabilidad la tiene
-  // execute() de  modificarlo
+struct ErrorExp : Exp
+{
+  string msg;
+
+  ErrorExp(const string & m) : Exp(ERROR), msg(m) {}
+
+  ExecStatus execute()
+  {
+    return make_pair(false, msg);
+  }
+
+  ostream & trace(ostream & out) const { return out << "Exp "; }
 };
 
 struct StringExp : public Exp
@@ -92,7 +108,7 @@ struct StringExp : public Exp
 
   ExecStatus execute() 
   {
-    WARNING("StringExp: execute method called"); return ExecStatus();     
+    return make_pair(true, "");
   }
 
   ostream & trace(ostream & out) const { return out << "StringExp "; }
@@ -100,13 +116,15 @@ struct StringExp : public Exp
 
 struct Var
 {
-  enum VarType { Map, List, String, Int } var_type;
+  enum VarType { Map, List, String, Int, Report } var_type;
 
   Var(VarType type) : var_type(type) {}
 
   virtual ~Var() {} // virtual para poder liberar recursos de las derivadas
 
   virtual string info() const = 0;
+  virtual Var * clone() const = 0;
+  virtual void copy(Var * src) = 0;
 
   string type_string() const 
   {
@@ -118,6 +136,7 @@ struct Var
       case Int: return string("Int");
       default: ERROR("Invalid type %ld", var_type);
       }
+    return string("Var::type_string() var_type invalid");
   }
 };
 
@@ -133,8 +152,9 @@ public:
 
   bool has_value() const noexcept { return value_ptr != nullptr; }
 
-  void free_var() noexcept
+  void free_value() noexcept
   {
+    cout << "**** Freing var " << name << endl;
     if (value_ptr == nullptr)
       return;
 
@@ -142,13 +162,19 @@ public:
     value_ptr = nullptr;
   }
 
-  Varname(char * nom) : Exp(VAR), name(nom) {}
+  Varname(string nom) : Exp(VAR), name(move(nom)) {}
 
-  ~Varname() { if (value_ptr != nullptr) delete value_ptr; }
+  ~Varname() { free_value(); }
 
   ExecStatus execute() 
   {
-    WARNING("Varname: execute method called"); return ExecStatus();  
+    if (value_ptr == nullptr)
+      {
+	stringstream s;
+	s << "Var name " << name << " has not assigned value";
+	return make_pair(false, s.str());
+      }
+    return make_pair(true, "");
   }
 
   ostream & trace(ostream & out) const { return out << "Varname "; }
@@ -158,7 +184,7 @@ public:
   void set_value_ptr(Var * ptr) noexcept { value_ptr = ptr; }
 };
 
-struct Info : Exp
+struct Info : public Exp
 {
   const string name;
 
@@ -169,10 +195,33 @@ struct Info : Exp
   ostream & trace(ostream & out) const { return out << "Info "; }
 };
 
+struct Ls : public Exp
+{
+  Ls() : Exp(LS) {}
+
+  ExecStatus execute();
+
+  ostream & trace(ostream & out) const { return out << "Ls "; }
+};
+
+struct Rm : public Exp
+{
+  DynList<string> names;
+
+  Rm() : Exp(RM) {}
+
+  ExecStatus execute();
+
+  ostream & trace(ostream & out) const { return out << "Rm "; }
+};
+
 struct VarMap : public Var
 {
   MetaMapa value;
   VarMap() : Var(Map) {}
+
+  VarMap * clone() const { return new VarMap(); }
+  void copy(Var * src) { value = static_cast<VarMap*>(src)->value; }
 
   string info() const 
   {
@@ -191,6 +240,9 @@ struct VarList : public Var
   DynList<Var*> list;
 
   VarList() : Var(List) {}
+
+  VarList * clone() const { return new VarList; }
+  void copy(Var * src) { list = static_cast<VarList*>(src)->list; }
 
   ~VarList()
   {
@@ -213,6 +265,9 @@ struct VarString : public Var
   string value;
   VarString() : Var(String) {}
 
+  VarString * clone() const { return new VarString; }
+  void copy(Var * src) { value = static_cast<VarString*>(src)->value; }
+
   string info() const { return "String var: \"" + value + "\"\n"; }
 };
 
@@ -221,58 +276,100 @@ struct VarInt : public Var
   long value;
   VarInt() : Var(Int) {}
 
+  VarInt * clone() const { return new VarInt; }
+  void copy(Var * src) { value = static_cast<VarInt*>(src)->value; }
   string info() const { return "Int var: " + to_string(value) + '\n'; }
 };
 
-struct IdExp : public Exp
+struct IntExp : public Exp
 {
-  const Uid id;
+  const long value;
 
-  IdExp(const string & val) : Exp(ID), id(stol(val)) {}
+  IntExp(const string & val) : Exp(INTCONST), value(stol(val)) {}
 
-  ExecStatus execute() 
+  ExecStatus execute() { return make_pair(true, ""); }
+
+  ostream & trace(ostream & out) const { return out << "IntExp "; }
+};
+
+struct VarReport : public Var
+{
+  DynList<string> entries;
+
+  VarReport() : Var(Report) {}
+  Var * clone() const { return new VarReport; }
+  void copy(Var * src) { entries = static_cast<VarReport*>(src)->entries; }
+  string info() const 
   {
-    WARNING("IdExp: execute method called"); return ExecStatus(); 
+    stringstream s;
+    s << "Report var with " << entries.size() << " entries";
+    return s.str();
   }
-
-  ostream & trace(ostream & out) const { return out << "IdExp "; }
 };
 
-struct NetExp : public Exp
+struct Search : public Exp
 {
-  Net net;
+  string mapa_name;
+  MetaMapa * mapa_ptr = nullptr;
 
-  NetExp() : Exp(GRAPH) { }
+  SearchProducer(Exp::Type type, const string & name) 
+    : Exp(type), mapa_name(name) {}
 
-  ostream & trace(ostream & out) const { return out << "NetExp "; }
+  ExecStatus set_mapa();
 };
 
-struct Load : public Exp
+struct SearchProducerId : public SearchProducer
 {
-  StringExp * file_name = nullptr;
-  MetaMapa mapa;
+  string mapa_name;
+  Exp * int_exp = nullptr;
 
-  Load(StringExp * exp) noexcept : Exp(GRAPH), file_name(exp) {}
+  SearchProducerId(const string & name, Exp * exp) 
+    : Search(SEARCH, mapa_name), int_exp(exp) {}
 
   ExecStatus execute();
 
-  ~Load() { delete file_name; }
+  ostream & trace(ostream & out) const { return out << "SearchProducerId "; }
+};
+
+// struct SearchProducerRegex : public Exp
+// {
+
+// };
+
+// struct SearchProducerRif : public Exp
+// {
+
+// };
+
+// struct SearchProducerExt : public Exp
+// {
+
+// };
+
+struct Load : public Exp
+{
+  Exp * name_exp = nullptr;
+  MetaMapa mapa;
+
+  Load(Exp * exp) noexcept : Exp(GRAPH), name_exp(exp) {}
+
+  ExecStatus execute();
 
   ostream & trace(ostream & out) const { return out << "Load "; }
 };
 
 struct Assign : public Exp
 {
-  Varname * left_side;
+  string left_name;
   Exp * right_side;
 
-  Assign(Varname * var, Exp * rhs) 
-    : Exp(ASSIGN), left_side(var), right_side(rhs) {}
+  Assign(string lname, Exp * rhs) 
+    : Exp(ASSIGN), left_name(move(lname)), right_side(rhs) {}
 
   ~Assign()
   {
-    delete left_side;
-    delete right_side;
+    if (right_side->type != VAR)
+      delete right_side; 
   }
 
   ExecStatus execute();
