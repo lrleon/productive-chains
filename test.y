@@ -22,11 +22,12 @@
   ASTList * node_list;
   Exp * expr;
   Rm  * rmexp;
+  Search * search_exp;
   char * symbol;
   char * error_msg;
 };
 
-%token LOAD SAVE EXIT ERROR INFO LS RM
+%token LOAD SAVE EXIT ERROR INFO LS RM SEARCH PRODUCER LIST APPEND
 %token <symbol> STRCONST INTCONST VARNAME 
 
 %type <expr> exp
@@ -34,7 +35,7 @@
 %type <expr> ref_exp cmd_unit
 %type <node_list> cmd_list line
 %type <rmexp> rm_list
-
+%type <search_exp> search_cmd
 
 %%
 
@@ -75,8 +76,11 @@ cmd_unit: EXIT
 	  }
         | VARNAME '=' exp
  	  { 
-	    auto ptr = new Assign($1, $3);
-	    $$ = ptr;
+	    $$ = new Assign($1, $3);
+	  }
+        | VARNAME '[' ref_exp ']' '=' exp
+	  {
+	    $$ = new ListWrite($1, $3, $6);
 	  }
         | SAVE ref_exp ref_exp
 	  {
@@ -94,6 +98,14 @@ cmd_unit: EXIT
   	  {
 	    $$ = $2;
 	  }
+        | APPEND VARNAME ref_exp
+	  {
+	    $$ = new Append($2, $3);
+	  }
+        | search_cmd
+	  {
+	    $$ = $1;
+	  }
 ;
 
 rm_list : VARNAME
@@ -108,18 +120,30 @@ rm_list : VARNAME
 	    rm->names.append($1);
 	    $$ = rm;
 	  }
+;
+
+search_cmd: SEARCH PRODUCER VARNAME ref_exp
+            {
+	      cout << "Parsed SEARCH PRODUCER " << $3 << endl;
+	      $$ = new SearchProducerRif($3, $4);
+	    }
+;
 
 exp : LOAD ref_exp
       {
 	$$ = new Load(static_cast<StringExp*>($2));
       }
+    | LIST
+      {
+	$$ = new ListExp;
+      }
     | VARNAME '[' ref_exp ']'
       {
-	
+	$$ = new ListRead($1, $3);
       }
     | ref_exp
       {
-
+	$$ = $1;
       }
 ;
 
@@ -224,9 +248,11 @@ ExecStatus Assign::execute()
   Varname * left_side = var_tbl(left_name);
   if (left_side == nullptr)
     left_side = var_tbl.addvar(left_name, new Varname(left_name));
+
+  stringstream s;
   switch (right_side->type)
     {
-    case Exp::Type::GRAPH:
+    case Exp::Type::MAP:
       {
       again_graph:
 	auto var = left_side->get_value_ptr();
@@ -243,6 +269,7 @@ ExecStatus Assign::execute()
 	  }
 	static_cast<VarMap*>(var)->value = 
 	  move(static_cast<Load*>(right_side)->mapa);
+	delete right_side;
 	return make_pair(true, "");
       }
     case Exp::Type::STRCONST:
@@ -262,6 +289,7 @@ ExecStatus Assign::execute()
 	  }
 	static_cast<VarString*>(var)->value = 
 	  move(static_cast<StringExp*>(right_side)->value);
+	delete right_side;
 	return make_pair(true, "");
       }
     case Exp::Type::INTCONST:
@@ -281,6 +309,7 @@ ExecStatus Assign::execute()
 	  }
 	static_cast<VarInt*>(var)->value = 
 	  move(static_cast<IntExp*>(right_side)->value);
+	delete right_side;
 	return make_pair(true, "");
       }
     case Exp::Type::VAR:
@@ -288,13 +317,11 @@ ExecStatus Assign::execute()
 	auto rvalue = static_cast<Varname*>(right_side)->get_value_ptr();
 	if (rvalue == nullptr)
 	  {
-	    stringstream s;
 	    s << "rvalue name " << static_cast<Varname*>(right_side)->name 
 	      << " has not associated a value" << endl
 	      << "THIS PROBABLY IS A BUG. SO, PLEASE REPORT IT";
 	    return make_pair(false, s.str());
 	  }
-
 	
 	auto lvalue = left_side->get_value_ptr();
 	if (lvalue == nullptr)
@@ -306,20 +333,60 @@ ExecStatus Assign::execute()
 	  }
 	assert(lvalue->var_type == rvalue->var_type);
 	lvalue->copy(rvalue);
-	break;
+	return make_pair(true, "");
       }
+    case Exp::Type::LIST:
+      {
+      again_list:
+	auto var = left_side->get_value_ptr();
+	if (var == nullptr)
+	  {
+	    var = new VarList;
+	    left_side->set_value_ptr(var);
+	  }
+
+	if (var->var_type != Var::VarType::List)
+	  {
+	    left_side->free_value();
+	    goto again_list;
+	  }
+	// Originalmente la lista es vacia. Por eso aqui no hay asignacion
+	return make_pair(true, "");
+      }
+    case Exp::Type::LISTREAD:
+      {
+	Var * rvalue = *static_cast<ListRead*>(right_side)->val;
+	if (rvalue == nullptr)
+	  {
+	    s << "Entry list has not associated a value"
+	      << "THIS PROBABLY IS A BUG. SO, PLEASE REPORT IT";
+	    return make_pair(false, s.str());
+	  }
+	auto lvalue = left_side->get_value_ptr();
+	if (lvalue == nullptr)
+	  left_side->set_value_ptr(lvalue = rvalue->clone());
+	else if (lvalue->var_type != rvalue->var_type) 
+	{
+	  left_side->free_value();
+	  left_side->set_value_ptr(lvalue = rvalue->clone());
+	}
+	assert(lvalue->var_type == rvalue->var_type);
+	lvalue->copy(rvalue);
+	return make_pair(true, "");
+      }      
     default:
-      cout << "Assign " << right_side->type_string() << " = "
-	   << left_side->type_string() << " not yet implemented" << endl;
-      return make_pair(false, "Assignation type not yet implemented");
+      s << "Assign " << right_side->type_string() << " = "
+	<< left_side->type_string() << " not yet implemented";
+      cout << s.str() << endl;
+      return make_pair(false, s.str());
     };
-  return ExecStatus();
+  return make_pair(true, "");
 }
 
 ExecStatus Info::execute() 
 {
   stringstream s;
-  s << "var name: ";
+  s << "var " << name << ": ";
   Varname * varname = var_tbl(name);
   if (varname == nullptr)
     {
@@ -328,7 +395,7 @@ ExecStatus Info::execute()
       cout << str << endl;
       return make_pair(false, move(str));
     }
-
+  
   auto var = varname->get_value_ptr();
   assert(var);
   s << var->info();
@@ -361,40 +428,52 @@ ExecStatus Rm::execute()
   return make_pair(true, "");
 }
 
-ExecStatus SearchProducer::set_mapa() 
+ExecStatus Search::set_mapa() 
 {
+  stringstream s;
   Varname * mapa = var_tbl(mapa_name);
   if (mapa == nullptr)
     {
-      stringstream s;
       s << "Map var " << mapa_name << " not found";
       return make_pair(false, s.str());
     }
 
-  mapa_ptr = &static_cast<VarMap*>(mapa->get_value_ptr())->value;
+  VarMap * ptr = static_cast<VarMap*>(mapa->get_value_ptr());
+  if (ptr== nullptr)
+    {
+      s << "Map var"  << mapa_name << " has not a associated value"
+	<< "THIS PROBABLY IS A BUG. PLEASE REPORT IT";
+      return make_pair(false, s.str());
+    }
+
+  mapa_ptr = &ptr->value;
 
   return make_pair(true, "");
 }
 
-
-ExecStatus SearchProducerId::execute()
+ExecStatus SearchProducerRif::execute()
 {
   auto r = set_mapa();
   if (not r.first)
     return make_pair(false, r.second);
+  assert(mapa_ptr != nullptr);
+
+  auto res = str_exp->execute();
+  if (not res.first)
+    return make_pair(false, res.second);
 
   stringstream s;
 
-  Uid id;
-  switch (int_exp->type)
+  string rif;
+  switch (str_exp->type)
     {
-    case INTCONST: 
-      id = static_cast<IntExp*>(int_exp)->value;
+    case STRCONST: 
+      rif = static_cast<StringExp*>(str_exp)->value;
       break;
     case VAR:
       {
-	Varname * varname = static_cast<Varname*>(int_exp);
-	VarInt * value = static_cast<VarInt*>(varname->get_value_ptr());
+	Varname * varname = static_cast<Varname*>(str_exp);
+	VarString * value = static_cast<VarString*>(varname->get_value_ptr());
 	if (value == nullptr)
 	  {
 	    s << "var name " << varname->name << " has not a value" << endl
@@ -407,12 +486,193 @@ ExecStatus SearchProducerId::execute()
 	      << " does not correspond to an interger";
 	    return make_pair(false, s.str());
 	  }
-	id = value->value;
+	rif = value->value;
 	break;
       }
     default:
       return make_pair(false, "id in search producer id is not an integer");
     }
   
-  // TODO: terminar, no esta lista
+  productor_ptr = mapa_ptr->tabla_productores(rif);
+  if (productor_ptr == nullptr)
+    return make_pair(false, "Rif " + rif + " not found");
+  return make_pair(true, "");
+}
+
+ExecStatus Append::execute()
+{
+  stringstream s;
+  Varname * varname = var_tbl(list_name);
+  if (varname == nullptr)
+    {
+      s << "var name " << list_name << " not found";
+      return make_pair(false, s.str());
+    }
+
+  VarList * varlist = static_cast<VarList*>(varname->get_value_ptr());
+  if (varlist == nullptr)
+    {
+      s << "var name " << varname->name << " has not a value" << endl
+	<< "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
+      return make_pair(false, s.str());
+    }
+
+  if (varlist->var_type != Var::List)
+    {
+      s << "var name " << list_name << " is not a list";
+      return make_pair(false, s.str());
+    }
+
+  auto r = rexp->execute();
+  if (not r.first)
+    return make_pair(false, r.second);
+
+  switch (rexp->type)
+    {
+    case Exp::Type::STRCONST:
+      {
+	VarString * var = new VarString;
+	var->value = move(static_cast<StringExp*>(rexp)->value);
+	varlist->list.append(var);
+	delete rexp;
+	break;
+      }
+    case Exp::Type::INTCONST:
+      {
+	VarInt * var = new VarInt;
+	var->value = move(static_cast<IntExp*>(rexp)->value);
+	varlist->list.append(var);
+	delete rexp;
+	break;
+      }
+    case Exp::Type::VAR:
+      {
+	auto vname = static_cast<Varname*>(rexp);
+	auto rvalue = vname->get_value_ptr();
+	if (rvalue == nullptr)
+	  {
+	    s << "right var name " << vname->name << " has not a value" << endl
+	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
+	    return make_pair(false, s.str());
+	  }
+	auto val = rvalue->clone();
+	val->copy(rvalue);
+	varlist->list.append(val);
+	break;
+      }
+      // TODO: anadir un nuevo tipo Net con operaciones y con
+      // operaciones topológicas
+    default:
+      ERROR("Append::execute(): invalid expression type");
+    }
+
+  return make_pair(true, "");
+}
+
+ExecStatus ListAccess::access()
+{
+  stringstream s;
+  auto varname = var_tbl(list_name);
+  if (varname == nullptr)
+    {
+      s << "Var name " << list_name << " not found";
+      return make_pair(false, s.str());
+    }
+
+  auto var = static_cast<VarList*>(varname->get_value_ptr());
+  if (var == nullptr)
+    {
+      s << "var name " << varname->name << " has not a value" << endl
+	<< "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
+      return make_pair(false, s.str());
+    }
+  if (var->var_type != Var::VarType::List)
+    {
+      s << "Var name " << list_name << " is not a list type";
+      return make_pair(false, s.str());
+    }
+
+  auto r = index_exp->execute();
+  if (not r.first)
+    return make_pair(false, r.second);
+
+  size_t i = 0;
+  switch (index_exp->type)
+    {
+    case Exp::Type::INTCONST:
+      i = static_cast<IntExp*>(index_exp)->value;
+      break;
+    case Exp::Type::VAR:
+      {
+	auto rval = static_cast<Varname*>(index_exp)->get_value_ptr();;
+	if (rval->var_type != Var::VarType::Int)
+	  {
+	    s << "list index var name " << list_name << " is not an integer";
+	    return make_pair(false, s.str());
+	  }
+	i = static_cast<VarInt*>(rval)->value;
+	break;
+      }
+    default:
+      s << "In " << list_name << "[exp]: exp is not an integer type";
+      return make_pair(false, s.str());
+    }
+  
+  try
+    {
+      val = &var->list.nth(i);
+    }
+  catch (out_of_range & e)
+    {
+      return make_pair(false, to_string(i) + " " + e.what());
+    }
+
+  delete index_exp;
+  return make_pair(true, "");
+}
+
+ExecStatus ListRead::execute()
+{
+  return access();
+}
+
+ExecStatus ListWrite::execute()
+{
+  auto r = access();
+  if (not r.first)
+    return make_pair(false, r.second);
+
+  r = rexp->execute();
+  if (not r.first)
+    return make_pair(false, r.second);
+
+  assert(val != nullptr);
+  delete *val;
+
+  switch (rexp->type)
+    {
+    case Exp::Type::INTCONST:
+      *val = new VarInt;
+      static_cast<VarInt*>(*val)->value = static_cast<IntExp*>(rexp)->value;
+      break;
+    case Exp::Type::STRCONST:
+      *val = new VarString;
+      static_cast<VarString*>(*val)->value = 
+	static_cast<StringExp*>(rexp)->value;
+      break;
+    case Exp::Type::VAR:
+      {
+	auto rval = static_cast<Varname*>(rexp)->get_value_ptr();
+	auto new_val = rval->clone();
+	new_val->copy(rval);
+	*val = new_val;
+      break;
+      }
+    default:
+      ERROR("ListWrite::execute() invalid rvalue type");
+    }
+
+  delete index_exp;
+  delete rexp;
+  return make_pair(true, "");
 }

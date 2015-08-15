@@ -10,10 +10,15 @@
 
 %{
 
+# include <signal.h>
+# include <stdlib.h>
+# include <unistd.h>
 # include <tclap/CmdLine.h>
 # include <net-parser.H>
 # include <net-symtbl.H>
 # include "test.tab.h"
+
+# define YYDEBUG 1
 
   size_t curr_lineno = 0;
 
@@ -57,6 +62,10 @@ EXIT         [eE][xX][iI][tT]
 INFO         [iI][nN][fF][oO]
 LS           [lL][sS]
 RM           [rR][mM]
+SEARCH       [sS][eE][aA][rR][cC][hH]
+PRODUCER     [pP][rR][oO][dD][uU][cC][eE][rR]
+LIST         [lL][iI][sS][tT]
+APPEND       [aA][pP][pP][eE][nN][dD]
 
 SPACE           [ \f\r\t\v]
 
@@ -80,6 +89,11 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
 {INFO}       return INFO;
 {LS}         return LS;
 {RM}         return RM;
+{SEARCH}     return SEARCH;
+{PRODUCER}   return PRODUCER;
+{LIST}       return LIST;
+{APPEND}     return APPEND;
+
 
  /*
   * The single-characters tokens 
@@ -195,7 +209,9 @@ string get_prompt(size_t i)
   return s.str();
 }
 
-extern int yydebug;
+# ifdef YYDEBUG
+int yydebug;
+# endif
 
 bool verbose = true;
 
@@ -214,11 +230,27 @@ void process_comand_line(int argc, char *argv[])
 
 extern ASTList * line_commands;
 
+bool exit_by_ctr_c = false;
+
+void my_handler(int s)
+{
+  if (s == 15)
+    exit_by_ctr_c = true;
+}
+
 int main()
 {
 # ifdef YYDEBUG
   yydebug = 1;
 # endif
+
+  signal (SIGINT,my_handler);
+  // struct sigaction sigIntHandler;
+  // sigIntHandler.sa_handler = my_handler;
+  // sigemptyset(&sigIntHandler.sa_mask);
+  // sigIntHandler.sa_flags = 0;
+  // sigaction(SIGINT, &sigIntHandler, NULL);
+
   for (size_t i = 0; true;) 
      {
        string prompt = get_prompt(i);
@@ -233,16 +265,27 @@ int main()
 
        if (status == 0)
 	 {
-	   cout << "line correctly parsed" << endl;
+	   /* cout << "line correctly parsed" << endl; */
 	   ++i;
 	   if (line_commands != nullptr)
 	     {
-	       line_commands->for_each([] (auto c) { c->execute(); });
+	       line_commands->for_each([] (auto c) 
+                 {
+		   auto status = c->execute();
+		   if (not status.first)
+		     {
+		       cout << "ERROR: " << status.second << endl;
+		       c->free();
+		     }
+		 });
 	       delete line_commands;
 	       line_commands = nullptr;
 	     }
 	   cout << endl;
 	 }
+
+       if (exit_by_ctr_c)
+	 cout << "ctr-c pressed" << endl;
        
        add_history(line);
 

@@ -24,7 +24,7 @@ struct ASTNode : public Tree_Node_Vtl<Empty_Class>
   bool on_error() const noexcept { return was_executed(); }
 
   virtual ExecStatus execute() = 0;
-
+  virtual void free() = 0;
   virtual ostream & trace(ostream & out) const
   {
     return out << "ASTNode"<< endl;
@@ -53,23 +53,26 @@ struct ASTList : public DynList<ASTNode*>
 
 struct Exp : public ASTNode
 {
-  enum Type { GRAPH, LIST, STRCONST, INTCONST, VAR, ASSIGN, INFO, LS, RM, 
-	      SEARCH, ERROR } type;
+  enum Type { MAP, LIST, STRCONST, INTCONST, VAR, ASSIGN, INFO, LS, RM, 
+	      SEARCH, APPEND, LISTREAD, LISTWRITE, ERROR } type;
 
   string type_string() const
   {
     switch (type)
       {
-      case GRAPH: return string("GRAPH");
-      case LIST: return string("LIST");
-      case STRCONST: return string("STRCONST");
-      case INTCONST: return string("INTCONST");
-      case VAR: return string("VAR");
-      case ASSIGN: return string("ASSIGN");
-      case INFO: return string("INFO");
-      case LS: return string("LS");
-      case RM: return string("RM");
-      case SEARCH: return string("SEARCH");
+      case MAP: return "MAP";
+      case LIST: return "LIST";
+      case STRCONST: return "STRCONST";
+      case INTCONST: return "INTCONST";
+      case VAR: return "VAR";
+      case ASSIGN: return "ASSIGN";
+      case INFO: return "INFO";
+      case LS: return "LS";
+      case RM: return "RM";
+      case SEARCH: return "SEARCH";
+      case APPEND: return "APPEND";
+      case LISTREAD: return "LISTREAD";
+      case LISTWRITE: return "LISTWRITE";
       default:
 	ERROR("Tipo de expresion invalido");
       }
@@ -82,7 +85,7 @@ struct Exp : public ASTNode
   { 
     ERROR("Epx: execute method called"); return ExecStatus(); 
   }
-
+  void free() { ERROR("Exp: free() methoid called"); }
   ostream & trace(ostream & out) const { return out << "Exp "; }
 };
 
@@ -91,32 +94,42 @@ struct ErrorExp : Exp
   string msg;
 
   ErrorExp(const string & m) : Exp(ERROR), msg(m) {}
-
-  ExecStatus execute()
-  {
-    return make_pair(false, msg);
-  }
-
+  ExecStatus execute() { return make_pair(false, msg); }
+  void free() {}
   ostream & trace(ostream & out) const { return out << "Exp "; }
 };
 
 struct StringExp : public Exp
 {
   const string value;
-
   StringExp(char * str) : Exp(STRCONST), value(str) {}
-
-  ExecStatus execute() 
-  {
-    return make_pair(true, "");
-  }
-
+  ExecStatus execute() { return make_pair(true, ""); }
   ostream & trace(ostream & out) const { return out << "StringExp "; }
+};
+
+struct ListExp : public Exp
+{
+  ListExp() : Exp(LIST) {}
+  ExecStatus execute() { return make_pair(true, ""); }
+  void free() {}
+  ostream & trace(ostream & out) const { return out << "ListExp "; }
+};
+
+struct Append : public Exp
+{
+  string list_name;
+  Exp * rexp;
+
+  Append(const string & name, Exp * e) 
+    : Exp(APPEND), list_name(name), rexp(e) {}
+  ExecStatus execute();
+  void free() { delete rexp; }
+  ostream & trace(ostream & out) const { return out << "Append "; }
 };
 
 struct Var
 {
-  enum VarType { Map, List, String, Int, Report } var_type;
+  enum VarType { Map, List, String, Int, Producer } var_type;
 
   Var(VarType type) : var_type(type) {}
 
@@ -134,6 +147,7 @@ struct Var
       case List: return string("List");
       case String: return string("String");
       case Int: return string("Int");
+      case Producer: return string("Producer");
       default: ERROR("Invalid type %ld", var_type);
       }
     return string("Var::type_string() var_type invalid");
@@ -154,10 +168,10 @@ public:
 
   void free_value() noexcept
   {
-    cout << "**** Freing var " << name << endl;
     if (value_ptr == nullptr)
       return;
 
+    cout << "**** Freing var " << name << endl;
     delete value_ptr;
     value_ptr = nullptr;
   }
@@ -176,11 +190,10 @@ public:
       }
     return make_pair(true, "");
   }
-
+  void free() { free_value(); }
   ostream & trace(ostream & out) const { return out << "Varname "; }
 
   Var * get_value_ptr() const noexcept { return value_ptr; }
-
   void set_value_ptr(Var * ptr) noexcept { value_ptr = ptr; }
 };
 
@@ -191,7 +204,7 @@ struct Info : public Exp
   Info(char * nom) : Exp(INFO), name(nom) {}
 
   ExecStatus execute();
-
+  void free() {}
   ostream & trace(ostream & out) const { return out << "Info "; }
 };
 
@@ -200,7 +213,7 @@ struct Ls : public Exp
   Ls() : Exp(LS) {}
 
   ExecStatus execute();
-
+  void free() {}
   ostream & trace(ostream & out) const { return out << "Ls "; }
 };
 
@@ -211,7 +224,7 @@ struct Rm : public Exp
   Rm() : Exp(RM) {}
 
   ExecStatus execute();
-
+  void free() {}
   ostream & trace(ostream & out) const { return out << "Rm "; }
 };
 
@@ -242,19 +255,27 @@ struct VarList : public Var
   VarList() : Var(List) {}
 
   VarList * clone() const { return new VarList; }
-  void copy(Var * src) { list = static_cast<VarList*>(src)->list; }
 
-  ~VarList()
+  void copy(Var * src)
   {
-    list.for_each([] (auto v) { delete v; } );
+    static_cast<VarList*>(src)->list.for_each([this] (auto v)
+      {
+	auto vv = v->clone();
+	vv->copy(v);
+	list.append(vv);
+      });
   }
+
+  ~VarList() { list.for_each([] (auto v) { delete v; } ); }
 
   string info() const 
   {
     stringstream s;
-    s << "List var: ";
+    s << "List var: " << endl;
     size_t i = 0;
-    list.for_each([&i, &s] (auto v) { s << i++ << ": " << v->info() << endl; });
+    list.for_each([&i, &s] (auto v) { s << i++ << ": " << v->info(); });
+    if (i == 0)
+      s << "EMPTY";
     s << endl;
     return s.str();
   }
@@ -288,55 +309,87 @@ struct IntExp : public Exp
   IntExp(const string & val) : Exp(INTCONST), value(stol(val)) {}
 
   ExecStatus execute() { return make_pair(true, ""); }
-
+  void free() {}
   ostream & trace(ostream & out) const { return out << "IntExp "; }
 };
 
-struct VarReport : public Var
+struct VarProducer : public Var
 {
-  DynList<string> entries;
+  Productor productor;
 
-  VarReport() : Var(Report) {}
-  Var * clone() const { return new VarReport; }
-  void copy(Var * src) { entries = static_cast<VarReport*>(src)->entries; }
+  VarProducer() : Var(Producer) {}
+  Var * clone() const { return new VarProducer; }
+  void copy(Var * src) 
+  {
+    productor = static_cast<VarProducer*>(src)->productor; 
+  }
   string info() const 
   {
     stringstream s;
-    s << "Report var with " << entries.size() << " entries";
+    s << "Producer var: " << productor.to_string();
     return s.str();
   }
+};
+
+struct ListAccess
+{ 
+  string list_name;
+  Exp *  index_exp = nullptr;
+  Var ** val = nullptr; // ** para poder mantener referencia en escritura
+
+  ListAccess(const string & name, Exp * idx_exp)
+    : list_name(name), index_exp(idx_exp) {}
+  ExecStatus access();
+};
+
+struct ListRead : public Exp, public ListAccess
+{
+  ListRead(const string & name, Exp * idx_exp) 
+    : Exp(LISTREAD), ListAccess(name, idx_exp) {}
+  ExecStatus execute();
+  void free() { delete index_exp; }
+  ostream & trace(ostream & out) const { return out << "ListRead "; }
+};
+
+struct ListWrite : public Exp, public ListAccess
+{
+  Exp * rexp = nullptr;
+
+  ListWrite(const string & name, Exp * idx_exp, Exp * exp) 
+    : Exp(LISTWRITE), ListAccess(name, idx_exp), rexp(exp) {}
+  ExecStatus execute();
+  void free() 
+  {
+    delete index_exp; 
+    delete rexp;
+  }
+  ostream & trace(ostream & out) const { return out << "ListRead "; }
 };
 
 struct Search : public Exp
 {
   string mapa_name;
-  MetaMapa * mapa_ptr = nullptr;
+  const MetaMapa * mapa_ptr = nullptr;
 
-  SearchProducer(Exp::Type type, const string & name) 
-    : Exp(type), mapa_name(name) {}
+  Search(Exp::Type type, const string & name) : Exp(type), mapa_name(name) {}
 
   ExecStatus set_mapa();
 };
 
-struct SearchProducerId : public SearchProducer
+struct SearchProducerRif : public Search
 {
-  string mapa_name;
-  Exp * int_exp = nullptr;
+  Exp * str_exp = nullptr;
+  Productor * productor_ptr = nullptr;
 
-  SearchProducerId(const string & name, Exp * exp) 
-    : Search(SEARCH, mapa_name), int_exp(exp) {}
+  SearchProducerRif(const string & name, Exp * exp) 
+    : Search(SEARCH, name), str_exp(exp) {}
 
   ExecStatus execute();
-
-  ostream & trace(ostream & out) const { return out << "SearchProducerId "; }
+  void free() { delete str_exp; }
+  ostream & trace(ostream & out) const { return out << "SearchProducerRif "; }
 };
 
 // struct SearchProducerRegex : public Exp
-// {
-
-// };
-
-// struct SearchProducerRif : public Exp
 // {
 
 // };
@@ -351,29 +404,29 @@ struct Load : public Exp
   Exp * name_exp = nullptr;
   MetaMapa mapa;
 
-  Load(Exp * exp) noexcept : Exp(GRAPH), name_exp(exp) {}
+  Load(Exp * exp) noexcept : Exp(MAP), name_exp(exp) {}
 
   ExecStatus execute();
-
+  void free() {delete name_exp; }
   ostream & trace(ostream & out) const { return out << "Load "; }
 };
 
 struct Assign : public Exp
 {
   string left_name;
-  Exp * right_side;
+  Exp * right_side = nullptr;
 
   Assign(string lname, Exp * rhs) 
     : Exp(ASSIGN), left_name(move(lname)), right_side(rhs) {}
 
   ~Assign()
   {
-    if (right_side->type != VAR)
-      delete right_side; 
+    // if (right_side->type != VAR)
+    //   delete right_side; 
   }
 
   ExecStatus execute();
-
+  void free() { delete right_side; }
   ostream & trace(ostream & out) const { return out << "Assign "; }
 };
 
@@ -384,7 +437,7 @@ struct Save : public ASTNode
   Save(const MetaMapa & mapa, char * name) : file_name(name) {}
 
   ExecStatus execute();
-
+  void error() {}
   ostream & trace(ostream & out) const { return out << "Save "; }
 };
 
