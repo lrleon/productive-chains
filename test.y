@@ -25,6 +25,8 @@
   Search * search_exp;
   char * symbol;
   char * error_msg;
+  Append * append;
+  DynList<Exp*> * exp_list;
 };
 
 %token LOAD SAVE EXIT ERROR INFO LS RM SEARCH PRODUCER LIST APPEND
@@ -36,6 +38,7 @@
 %type <node_list> cmd_list line
 %type <rmexp> rm_list
 %type <search_exp> search_cmd
+%type <exp_list> item_list
 
 %%
 
@@ -65,7 +68,9 @@ cmd_list: cmd_unit
 
 cmd_unit: EXIT
           {
-	    // TODO: limpiar todo el ambiente. Podria ser desde una rutina
+	    // TODO: limpiar todo el ambiente. Podria ser desde una
+	    // rutina. MEJOR: poner una variable bool en true para salir
+	    // desde main()
 	    cout << "Bye ;-)" << endl 
 		 << endl;
 	    exit(0);
@@ -98,14 +103,29 @@ cmd_unit: EXIT
   	  {
 	    $$ = $2;
 	  }
-        | APPEND VARNAME ref_exp
+        | APPEND VARNAME item_list
 	  {
 	    $$ = new Append($2, $3);
+	    delete $3;
 	  }
         | search_cmd
 	  {
 	    $$ = $1;
 	  }
+;
+
+item_list: ref_exp 
+             {
+	       auto l = new DynList<Exp*>;
+	       l->append($1);
+	       $$ = l;
+	     }
+         | item_list ref_exp 
+	   {
+	     auto l = $1;
+	     l->append($2);
+	     $$ = l;
+	   }
 ;
 
 rm_list : VARNAME
@@ -124,8 +144,7 @@ rm_list : VARNAME
 
 search_cmd: SEARCH PRODUCER VARNAME ref_exp
             {
-	      cout << "Parsed SEARCH PRODUCER " << $3 << endl;
-	      $$ = new SearchProducerRif($3, $4);
+	      $$ = new SearchProducerRifCmd($3, $4);
 	    }
 ;
 
@@ -144,6 +163,10 @@ exp : LOAD ref_exp
     | ref_exp
       {
 	$$ = $1;
+      }
+    | SEARCH PRODUCER VARNAME ref_exp
+      {
+	$$ = new SearchProducerRif($3, $4);
       }
 ;
 
@@ -312,6 +335,26 @@ ExecStatus Assign::execute()
 	delete right_side;
 	return make_pair(true, "");
       }
+    case Exp::Type::SEARCHPRODUCER:
+      {
+      again_search:
+	auto var = left_side->get_value_ptr();
+	if (var == nullptr)
+	  {
+	    var = new VarProducer;
+	    left_side->set_value_ptr(var);
+	  }
+
+	if (var->var_type != Var::VarType::Producer)
+	  {
+	    left_side->free_value();
+	    goto again_search;
+	  }
+	static_cast<VarProducer*>(var)->productor = 
+	  move(*static_cast<SearchProducerRif*>(right_side)->producer_ptr);
+	delete right_side;
+	return make_pair(true, "");
+      }
     case Exp::Type::VAR:
       {
 	auto rvalue = static_cast<Varname*>(right_side)->get_value_ptr();
@@ -451,28 +494,27 @@ ExecStatus Search::set_mapa()
   return make_pair(true, "");
 }
 
-ExecStatus SearchProducerRif::execute()
+ExecStatus Search::semant() 
 {
   auto r = set_mapa();
   if (not r.first)
     return make_pair(false, r.second);
   assert(mapa_ptr != nullptr);
 
-  auto res = str_exp->execute();
+  auto res = exp->execute();
   if (not res.first)
     return make_pair(false, res.second);
 
   stringstream s;
 
-  string rif;
-  switch (str_exp->type)
+  switch (exp->type)
     {
     case STRCONST: 
-      rif = static_cast<StringExp*>(str_exp)->value;
+      str = static_cast<StringExp*>(exp)->value;
       break;
     case VAR:
       {
-	Varname * varname = static_cast<Varname*>(str_exp);
+	Varname * varname = static_cast<Varname*>(exp);
 	VarString * value = static_cast<VarString*>(varname->get_value_ptr());
 	if (value == nullptr)
 	  {
@@ -480,22 +522,29 @@ ExecStatus SearchProducerRif::execute()
 	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
 	    return make_pair(false, s.str());
 	  }      
-	if (value->var_type != Var::VarType::Int)
+	if (value->var_type != Var::VarType::String)
 	  {
 	    s << "var name " << varname->name 
 	      << " does not correspond to an interger";
 	    return make_pair(false, s.str());
 	  }
-	rif = value->value;
+	str = value->value;
 	break;
       }
     default:
       return make_pair(false, "id in search producer id is not an integer");
     }
+}
+
+ExecStatus SearchProducerRif::compute()
+{
+  auto r = semant();
+  if (not r.first)
+    return make_pair(false, r.second);
   
-  productor_ptr = mapa_ptr->tabla_productores(rif);
-  if (productor_ptr == nullptr)
-    return make_pair(false, "Rif " + rif + " not found");
+  producer_ptr = mapa_ptr->tabla_productores(str);
+  if (producer_ptr == nullptr)
+    return make_pair(false, "Rif " + str + " not found");
   return make_pair(true, "");
 }
 
@@ -523,49 +572,56 @@ ExecStatus Append::execute()
       return make_pair(false, s.str());
     }
 
-  auto r = rexp->execute();
-  if (not r.first)
-    return make_pair(false, r.second);
-
-  switch (rexp->type)
+  for (auto it = rexp_list.get_it(); it.has_curr(); it.next())
     {
-    case Exp::Type::STRCONST:
-      {
-	VarString * var = new VarString;
-	var->value = move(static_cast<StringExp*>(rexp)->value);
-	varlist->list.append(var);
-	delete rexp;
-	break;
-      }
-    case Exp::Type::INTCONST:
-      {
-	VarInt * var = new VarInt;
-	var->value = move(static_cast<IntExp*>(rexp)->value);
-	varlist->list.append(var);
-	delete rexp;
-	break;
-      }
-    case Exp::Type::VAR:
-      {
-	auto vname = static_cast<Varname*>(rexp);
-	auto rvalue = vname->get_value_ptr();
-	if (rvalue == nullptr)
-	  {
-	    s << "right var name " << vname->name << " has not a value" << endl
-	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
-	    return make_pair(false, s.str());
-	  }
-	auto val = rvalue->clone();
-	val->copy(rvalue);
-	varlist->list.append(val);
-	break;
-      }
-      // TODO: anadir un nuevo tipo Net con operaciones y con
-      // operaciones topológicas
-    default:
-      ERROR("Append::execute(): invalid expression type");
+      auto rexp = it.get_curr();
+      auto r = rexp->execute();
+      if (not r.first)
+	return make_pair(false, r.second);      
     }
-
+  
+  for (auto it = rexp_list.get_it(); it.has_curr(); it.next())
+    {
+      auto rexp = it.get_curr();
+      switch (rexp->type)
+	{
+	case Exp::Type::STRCONST:
+	  {
+	    VarString * var = new VarString;
+	    var->value = move(static_cast<StringExp*>(rexp)->value);
+	    varlist->list.append(var);
+	    delete rexp;
+	    break;
+	  }
+	case Exp::Type::INTCONST:
+	  {
+	    VarInt * var = new VarInt;
+	    var->value = move(static_cast<IntExp*>(rexp)->value);
+	    varlist->list.append(var);
+	    delete rexp;
+	    break;
+	  }
+	case Exp::Type::VAR:
+	  {
+	    auto vname = static_cast<Varname*>(rexp);
+	    auto rvalue = vname->get_value_ptr();
+	    if (rvalue == nullptr)
+	      {
+		s << "right var name " << vname->name << " has not a value" 
+		  << endl
+		  << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
+		return make_pair(false, s.str());
+	      }
+	    auto val = rvalue->clone();
+	    val->copy(rvalue);
+	    varlist->list.append(val);
+	    break;
+	  }
+	default:
+	  ERROR("Append::execute(): invalid expression type");
+	}
+    }
+  
   return make_pair(true, "");
 }
 
@@ -672,7 +728,39 @@ ExecStatus ListWrite::execute()
       ERROR("ListWrite::execute() invalid rvalue type");
     }
 
-  delete index_exp;
   delete rexp;
+  return make_pair(true, "");
+}
+
+ExecStatus SearchProducerRifCmd::execute()
+{
+  auto r = compute();
+  if (not r.first)
+    return make_pair(false, r.second);
+
+  assert(producer_ptr != nullptr);
+
+  cout << *producer_ptr << endl;
+
+  return make_pair(true, "");
+}
+
+ExecStatus SearchProducerRegex::compute()
+{
+  auto r = semant();
+  if (not r.first)
+    return make_pair(false, r.second);
+  
+  for (auto it = mapa_ptr->tabla_productores.get_it(); it.has_curr(); it.next())
+    {
+
+    }
+  // producers = mapa_ptr->tabla_productores.filter([this] (auto p)
+  //   {
+
+  //   });
+  // producer_ptr = mapa_ptr->tabla_productores(str);
+  // if (producer_ptr == nullptr)
+  //   return make_pair(false, "Rif " + str + " not found");
   return make_pair(true, "");
 }

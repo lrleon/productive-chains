@@ -25,10 +25,6 @@ struct ASTNode : public Tree_Node_Vtl<Empty_Class>
 
   virtual ExecStatus execute() = 0;
   virtual void free() = 0;
-  virtual ostream & trace(ostream & out) const
-  {
-    return out << "ASTNode"<< endl;
-  }
 };
 
 struct ASTList : public DynList<ASTNode*>
@@ -38,23 +34,13 @@ struct ASTList : public DynList<ASTNode*>
     while (not this->is_empty())
       delete this->remove_first();
   }
-
-  ostream & trace(ostream & out) const
-  {
-    for_each([&out] (auto p) 
-	     {
-	       out << "Comando ";
-	       p->trace(out); 
-	       out << endl;
-	     });
-    return out;
-  }
 };
 
 struct Exp : public ASTNode
 {
   enum Type { MAP, LIST, STRCONST, INTCONST, VAR, ASSIGN, INFO, LS, RM, 
-	      SEARCH, APPEND, LISTREAD, LISTWRITE, ERROR } type;
+	      SEARCHPRODUCER, APPEND, LISTREAD, LISTWRITE, SEARCHPRODUCERREGEX,
+	      ERROR } type;
 
   string type_string() const
   {
@@ -69,7 +55,8 @@ struct Exp : public ASTNode
       case INFO: return "INFO";
       case LS: return "LS";
       case RM: return "RM";
-      case SEARCH: return "SEARCH";
+      case SEARCHPRODUCER: return "SEARCHPRODUCER";
+      case SEARCHPRODUCERREGEX: return "SEARCHPRODUCERREGEX";
       case APPEND: return "APPEND";
       case LISTREAD: return "LISTREAD";
       case LISTWRITE: return "LISTWRITE";
@@ -85,8 +72,7 @@ struct Exp : public ASTNode
   { 
     ERROR("Epx: execute method called"); return ExecStatus(); 
   }
-  void free() { ERROR("Exp: free() methoid called"); }
-  ostream & trace(ostream & out) const { return out << "Exp "; }
+  void free() { ERROR("Exp: free() method called"); }
 };
 
 struct ErrorExp : Exp
@@ -96,7 +82,6 @@ struct ErrorExp : Exp
   ErrorExp(const string & m) : Exp(ERROR), msg(m) {}
   ExecStatus execute() { return make_pair(false, msg); }
   void free() {}
-  ostream & trace(ostream & out) const { return out << "Exp "; }
 };
 
 struct StringExp : public Exp
@@ -104,7 +89,6 @@ struct StringExp : public Exp
   const string value;
   StringExp(char * str) : Exp(STRCONST), value(str) {}
   ExecStatus execute() { return make_pair(true, ""); }
-  ostream & trace(ostream & out) const { return out << "StringExp "; }
 };
 
 struct ListExp : public Exp
@@ -112,19 +96,17 @@ struct ListExp : public Exp
   ListExp() : Exp(LIST) {}
   ExecStatus execute() { return make_pair(true, ""); }
   void free() {}
-  ostream & trace(ostream & out) const { return out << "ListExp "; }
 };
 
 struct Append : public Exp
 {
   string list_name;
-  Exp * rexp;
+  DynList<Exp*> rexp_list;
 
-  Append(const string & name, Exp * e) 
-    : Exp(APPEND), list_name(name), rexp(e) {}
+  Append(const string & name, DynList<Exp*> * l_ptr) 
+    : Exp(APPEND), list_name(name), rexp_list(move(*l_ptr)) { }
   ExecStatus execute();
-  void free() { delete rexp; }
-  ostream & trace(ostream & out) const { return out << "Append "; }
+  void free() { rexp_list.for_each([this] (auto e) { delete e; }); }
 };
 
 struct Var
@@ -191,7 +173,6 @@ public:
     return make_pair(true, "");
   }
   void free() { free_value(); }
-  ostream & trace(ostream & out) const { return out << "Varname "; }
 
   Var * get_value_ptr() const noexcept { return value_ptr; }
   void set_value_ptr(Var * ptr) noexcept { value_ptr = ptr; }
@@ -205,7 +186,6 @@ struct Info : public Exp
 
   ExecStatus execute();
   void free() {}
-  ostream & trace(ostream & out) const { return out << "Info "; }
 };
 
 struct Ls : public Exp
@@ -214,7 +194,6 @@ struct Ls : public Exp
 
   ExecStatus execute();
   void free() {}
-  ostream & trace(ostream & out) const { return out << "Ls "; }
 };
 
 struct Rm : public Exp
@@ -225,7 +204,6 @@ struct Rm : public Exp
 
   ExecStatus execute();
   void free() {}
-  ostream & trace(ostream & out) const { return out << "Rm "; }
 };
 
 struct VarMap : public Var
@@ -310,7 +288,6 @@ struct IntExp : public Exp
 
   ExecStatus execute() { return make_pair(true, ""); }
   void free() {}
-  ostream & trace(ostream & out) const { return out << "IntExp "; }
 };
 
 struct VarProducer : public Var
@@ -348,7 +325,6 @@ struct ListRead : public Exp, public ListAccess
     : Exp(LISTREAD), ListAccess(name, idx_exp) {}
   ExecStatus execute();
   void free() { delete index_exp; }
-  ostream & trace(ostream & out) const { return out << "ListRead "; }
 };
 
 struct ListWrite : public Exp, public ListAccess
@@ -363,36 +339,52 @@ struct ListWrite : public Exp, public ListAccess
     delete index_exp; 
     delete rexp;
   }
-  ostream & trace(ostream & out) const { return out << "ListRead "; }
 };
 
 struct Search : public Exp
 {
   string mapa_name;
+  Exp * exp = nullptr;
   const MetaMapa * mapa_ptr = nullptr;
+  string str;
 
-  Search(Exp::Type type, const string & name) : Exp(type), mapa_name(name) {}
-
+  Search(Exp::Type type, const string & name, Exp * e) 
+    : Exp(type), mapa_name(name), exp(e) {}
   ExecStatus set_mapa();
+  ExecStatus semant();
+  void free() { delete exp; }
 };
 
 struct SearchProducerRif : public Search
 {
-  Exp * str_exp = nullptr;
-  Productor * productor_ptr = nullptr;
+  Productor * producer_ptr = nullptr;
 
   SearchProducerRif(const string & name, Exp * exp) 
-    : Search(SEARCH, name), str_exp(exp) {}
+    : Search(SEARCHPRODUCER, name, exp) {}
 
-  ExecStatus execute();
-  void free() { delete str_exp; }
-  ostream & trace(ostream & out) const { return out << "SearchProducerRif "; }
+  ExecStatus compute();
+  ExecStatus execute() { return compute(); }
 };
 
-// struct SearchProducerRegex : public Exp
-// {
+struct SearchProducerRifCmd : public SearchProducerRif
+{
+  using SearchProducerRif::SearchProducerRif;
+  
+  ExecStatus execute();
+};
 
-// };
+struct SearchProducerRegex : public Search
+{
+  Exp * regex_exp = nullptr;
+  DynList<Productor*> producers;
+
+  SearchProducerRegex(const string & name, Exp * exp)
+    : Search(SEARCHPRODUCERREGEX, name, exp) {}
+
+  ExecStatus compute();
+  ExecStatus execute() { return compute(); }
+  void free() { delete regex_exp; }
+};
 
 // struct SearchProducerExt : public Exp
 // {
@@ -408,7 +400,6 @@ struct Load : public Exp
 
   ExecStatus execute();
   void free() {delete name_exp; }
-  ostream & trace(ostream & out) const { return out << "Load "; }
 };
 
 struct Assign : public Exp
@@ -427,7 +418,6 @@ struct Assign : public Exp
 
   ExecStatus execute();
   void free() { delete right_side; }
-  ostream & trace(ostream & out) const { return out << "Assign "; }
 };
 
 struct Save : public ASTNode
@@ -438,7 +428,6 @@ struct Save : public ASTNode
 
   ExecStatus execute();
   void error() {}
-  ostream & trace(ostream & out) const { return out << "Save "; }
 };
 
 
