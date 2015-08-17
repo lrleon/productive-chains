@@ -40,7 +40,7 @@ struct Exp : public ASTNode
 {
   enum Type { MAP, LIST, STRCONST, INTCONST, VAR, ASSIGN, INFO, LS, RM, 
 	      SEARCHPRODUCER, APPEND, LISTREAD, LISTWRITE, SEARCHPRODUCERREGEX,
-	      ERROR } type;
+	      SEARCHPRODUCTID, SEARCHPRODUCTREGEX, HELP, ERROR } type;
 
   string type_string() const
   {
@@ -57,6 +57,9 @@ struct Exp : public ASTNode
       case RM: return "RM";
       case SEARCHPRODUCER: return "SEARCHPRODUCER";
       case SEARCHPRODUCERREGEX: return "SEARCHPRODUCERREGEX";
+      case SEARCHPRODUCTID: return "SEARCHPRODUCTID";
+      case SEARCHPRODUCTREGEX: return "SEARCHPRODUCTREGEX";
+      case HELP: return "HELP";
       case APPEND: return "APPEND";
       case LISTREAD: return "LISTREAD";
       case LISTWRITE: return "LISTWRITE";
@@ -111,7 +114,7 @@ struct Append : public Exp
 
 struct Var
 {
-  enum VarType { Map, List, String, Int, Producer } var_type;
+  enum VarType { Map, List, String, Int, Producer, Product } var_type;
 
   Var(VarType type) : var_type(type) {}
 
@@ -130,6 +133,7 @@ struct Var
       case String: return string("String");
       case Int: return string("Int");
       case Producer: return string("Producer");
+      case Product: return string("Product");
       default: ERROR("Invalid type %ld", var_type);
       }
     return string("Var::type_string() var_type invalid");
@@ -196,6 +200,13 @@ struct Ls : public Exp
   void free() {}
 };
 
+struct Help : public Exp
+{
+  Help(Type t = HELP) : Exp(t) {}
+  ExecStatus execute();
+  void free() {}
+};
+
 struct Rm : public Exp
 {
   DynList<string> names;
@@ -236,6 +247,7 @@ struct VarList : public Var
 
   void copy(Var * src)
   {
+    list.empty();
     static_cast<VarList*>(src)->list.for_each([this] (auto v)
       {
 	auto vv = v->clone();
@@ -251,7 +263,7 @@ struct VarList : public Var
     stringstream s;
     s << "List var: " << endl;
     size_t i = 0;
-    list.for_each([&i, &s] (auto v) { s << i++ << ": " << v->info(); });
+    list.for_each([&i, &s] (auto v) { s << i++ << ": " << v->info() << endl; });
     if (i == 0)
       s << "EMPTY";
     s << endl;
@@ -295,17 +307,24 @@ struct VarProducer : public Var
   Productor productor;
 
   VarProducer() : Var(Producer) {}
+  VarProducer(const Productor & p) : VarProducer() { productor = p; }
   Var * clone() const { return new VarProducer; }
   void copy(Var * src) 
   {
     productor = static_cast<VarProducer*>(src)->productor; 
   }
-  string info() const 
-  {
-    stringstream s;
-    s << "Producer var: " << productor.to_string();
-    return s.str();
-  }
+  string info() const { return "Producer var: " + productor.to_string(); }
+};
+
+struct VarProduct : public Var
+{
+  MetaProducto product;
+  
+  VarProduct() : Var(Product) {}
+  VarProduct(const MetaProducto & p) : VarProduct() { product = p; }
+  Var * clone() const { return new VarProduct; }
+  void copy(Var * src) { product = static_cast<VarProduct*>(src)->product; }
+  string info() const { return "Product var: " + product.to_string(); }
 };
 
 struct ListAccess
@@ -347,11 +366,13 @@ struct Search : public Exp
   Exp * exp = nullptr;
   const MetaMapa * mapa_ptr = nullptr;
   string str;
+  Uid id;
 
   Search(Exp::Type type, const string & name, Exp * e) 
     : Exp(type), mapa_name(name), exp(e) {}
-  ExecStatus set_mapa();
-  ExecStatus semant();
+  ExecStatus semant_mapa();
+  ExecStatus semant_string();
+  ExecStatus semant_int();
   void free() { delete exp; }
 };
 
@@ -362,34 +383,69 @@ struct SearchProducerRif : public Search
   SearchProducerRif(const string & name, Exp * exp) 
     : Search(SEARCHPRODUCER, name, exp) {}
 
-  ExecStatus compute();
-  ExecStatus execute() { return compute(); }
+  ExecStatus semant();
+  ExecStatus execute() { return semant(); }
 };
 
 struct SearchProducerRifCmd : public SearchProducerRif
 {
-  using SearchProducerRif::SearchProducerRif;
-  
+  using SearchProducerRif::SearchProducerRif;  
   ExecStatus execute();
 };
 
 struct SearchProducerRegex : public Search
 {
-  Exp * regex_exp = nullptr;
   DynList<Productor*> producers;
 
   SearchProducerRegex(const string & name, Exp * exp)
     : Search(SEARCHPRODUCERREGEX, name, exp) {}
 
-  ExecStatus compute();
-  ExecStatus execute() { return compute(); }
-  void free() { delete regex_exp; }
+  ExecStatus semant();
+  ExecStatus execute() { return semant(); }
 };
 
-// struct SearchProducerExt : public Exp
-// {
+struct SearchProducerRegexCmd : public SearchProducerRegex
+{
+  using SearchProducerRegex::SearchProducerRegex;
+  ExecStatus execute();
+};
 
-// };
+struct SearchProductId : public Search
+{
+  MetaProducto producto;
+  SearchProductId(const string & name, Exp * exp) 
+    : Search(SEARCHPRODUCTID, name, exp) {}
+  ExecStatus semant();
+  ExecStatus execute() { return semant(); }
+};
+
+struct SearchProductIdCmd : public SearchProductId
+{
+  using SearchProductId::SearchProductId;
+  ExecStatus execute();
+};
+
+struct SearchProducts : public Search
+{
+  DynList<MetaProducto*> productos;
+  
+  SearchProducts(Exp::Type type, const string & map_name, Exp * str_exp)
+    : Search(type, map_name, str_exp) {}
+};
+
+struct SearchProductsRegex : public SearchProducts
+{
+  SearchProductsRegex(const string & map_name, Exp * str_exp)
+    : SearchProducts(SEARCHPRODUCTREGEX, map_name, str_exp) {}
+  ExecStatus semant();
+  ExecStatus execute() { return semant(); }
+};
+
+struct SearchProductsRegexCmd : public SearchProductsRegex
+{
+  using SearchProductsRegex::SearchProductsRegex;
+  ExecStatus execute();
+};
 
 struct Load : public Exp
 {

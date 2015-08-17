@@ -587,17 +587,22 @@ struct MetaProducto
   DynSetTree<string> productores; // lista de rif de productores 
   DynMapTree<Uid, double> comb;
 
+  string to_string() const
+  {
+    stringstream s;
+    s << id << BLANK << cod_aran << BLANK << nombre << endl
+      << productores.size() << " :";
+    productores.for_each([&s] (auto p) { s << BLANK << p; });
+    s << endl
+      << comb.size() << " :";
+    comb.for_each([&s] (auto c) 
+		  { s << BLANK << c.first << "," << c.second; });
+    return s.str();
+  }
+
   friend ostream & operator << (ostream & out, const MetaProducto & p) 
   {
-    out << p.id << BLANK << p.cod_aran << BLANK << p.nombre << endl
-	<< p.productores.size() << " :";
-    p.productores.for_each([&out] (auto s) { out << BLANK << s; });
-    out << endl
-	<< p.comb.size() << " :";
-    p.comb.for_each([&out] (auto c) 
-		    { out << BLANK << c.first << "," << c.second; });
-    out << endl;
-    return out;
+    return out << p.to_string() << endl;
   }
 
   MetaProducto() {}

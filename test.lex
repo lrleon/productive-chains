@@ -64,13 +64,17 @@ LS           [lL][sS]
 RM           [rR][mM]
 SEARCH       [sS][eE][aA][rR][cC][hH]
 PRODUCER     [pP][rR][oO][dD][uU][cC][eE][rR]
+PRODUCERS    [pP][rR][oO][dD][uU][cC][eE][rR][sS]
+PRODUCT      [pP][rR][oO][dD][uU][cC][tT]
+ID           [iI][dD]
+REGEX        [rR][eE][gG][eE][xX]
 LIST         [lL][iI][sS][tT]
 APPEND       [aA][pP][pP][eE][nN][dD]
+HELP         [hH][eE][lL][pP]
 
 SPACE           [ \f\r\t\v]
 
 INTEGER         [[:digit:]]+
-ID              {INTEGER}
 VARNAME         [[:alpha:]][[:alnum:]_.-]*
 
 %%
@@ -91,8 +95,13 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
 {RM}         return RM;
 {SEARCH}     return SEARCH;
 {PRODUCER}   return PRODUCER;
+{PRODUCERS}  return PRODUCERS;
+{PRODUCT}    return PRODUCT;
+{REGEX}      return REGEX;
+{ID}         return ID;
 {LIST}       return LIST;
 {APPEND}     return APPEND;
+{HELP}       return HELP;
 
 
  /*

@@ -23,7 +23,7 @@ INCLUDE = -I. -I $(ALEPH)
 LIBS = -L $(ALEPH) \
        -lAleph -lnana -lm -lgsl -lgslcblas -lgmp -lmpfr -lasprintf -lpthread -lc
 
-OBJ = grafo.o net.o
+OBJ = grafo.o net.o help.o
 
 all: test test-1 test-2 test-3 test-io test-1-op test-2-op test-3-op transform-data transform-data-op transform-data-2 transform-data-2-op test-load-grafo test-load-productores test-load-productos load-net repl test-net test-lex
 
@@ -114,6 +114,9 @@ test-net: test-net.C tablas.H grafo.H net.H
 net: net.tab.c net-lex.o
 	$(CXX) $(FLAGS) $(INCLUDE) net.tab.c -o net -lfl -lreadline $(LIBS)
 #	$(CXX) $(FLAGS) $(INCLUDE) net.tab.c -o net net-lex.o -lfl -lreadline $(LIBS)
+
+help.o: net-tree.H help.C
+	$(CXX) $(FLAGS) $(INCLUDE) -c help.C
 
 test: test.lex test.y net-parser.H net-symtbl.H net-tree.H $(OBJ)
 	$(FLEX) -o test.C test.lex 

@@ -29,12 +29,13 @@
   DynList<Exp*> * exp_list;
 };
 
-%token LOAD SAVE EXIT ERROR INFO LS RM SEARCH PRODUCER LIST APPEND
+%token LOAD SAVE EXIT ERROR INFO LS RM SEARCH PRODUCER PRODUCERS LIST APPEND
+%token PRODUCT ID REGEX HELP
 %token <symbol> STRCONST INTCONST VARNAME 
 
 %type <expr> exp
 %type <expr> rvalue
-%type <expr> ref_exp cmd_unit
+%type <expr> ref_exp cmd_unit help_exp
 %type <node_list> cmd_list line
 %type <rmexp> rm_list
 %type <search_exp> search_cmd
@@ -108,10 +109,13 @@ cmd_unit: EXIT
 	    $$ = new Append($2, $3);
 	    delete $3;
 	  }
-        | search_cmd
-	  {
-	    $$ = $1;
-	  }
+        | search_cmd { $$ = $1; }
+        | help_exp { $$ = $1; }
+;
+
+help_exp: HELP { $$ = new Help; }
+        | HELP LOAD { $$ = new Help(Exp::Type::MAP); }
+        | HELP SEARCH { $$ = new Help(Exp::Type::SEARCHPRODUCER); }
 ;
 
 item_list: ref_exp 
@@ -146,6 +150,18 @@ search_cmd: SEARCH PRODUCER VARNAME ref_exp
             {
 	      $$ = new SearchProducerRifCmd($3, $4);
 	    }
+          | SEARCH PRODUCERS VARNAME ref_exp
+	    {
+	      $$ = new SearchProducerRegexCmd($3, $4);
+	    }
+          | SEARCH PRODUCT ID VARNAME ref_exp
+            {
+	      $$ = new SearchProductIdCmd($4, $5);
+	    }
+          | SEARCH PRODUCT REGEX VARNAME ref_exp
+	    {
+	      $$ = new SearchProductsRegexCmd($4, $5);
+	    }
 ;
 
 exp : LOAD ref_exp
@@ -167,6 +183,18 @@ exp : LOAD ref_exp
     | SEARCH PRODUCER VARNAME ref_exp
       {
 	$$ = new SearchProducerRif($3, $4);
+      }
+    | SEARCH PRODUCERS VARNAME ref_exp
+      {
+	$$ = new SearchProducerRegex($3, $4);
+      }
+    | SEARCH PRODUCT ID VARNAME ref_exp
+      {
+	$$ = new SearchProductId($4, $5);
+      }
+    | SEARCH PRODUCT REGEX VARNAME ref_exp
+      {
+	$$ = new SearchProductsRegex($4, $5);
       }
 ;
 
@@ -351,7 +379,72 @@ ExecStatus Assign::execute()
 	    goto again_search;
 	  }
 	static_cast<VarProducer*>(var)->productor = 
-	  move(*static_cast<SearchProducerRif*>(right_side)->producer_ptr);
+	  *static_cast<SearchProducerRif*>(right_side)->producer_ptr;
+	delete right_side;
+	return make_pair(true, "");
+      }
+    case Exp::Type::SEARCHPRODUCERREGEX:
+      {
+      again_search_regex:
+	auto var = left_side->get_value_ptr();
+	if (var == nullptr)
+	  {
+	    var = new VarList;
+	    left_side->set_value_ptr(var);
+	  }
+	else
+	  {
+	    left_side->free_value();
+	    goto again_search_regex;
+	  }
+	auto search_exp = static_cast<SearchProducerRegex*>(right_side);
+	search_exp->producers.for_each([var] (auto ptr)
+          {
+	    auto v = new VarProducer(*const_cast<Productor*>(ptr));
+	    static_cast<VarList*>(var)->list.append(v);
+	  });
+	delete right_side;
+	return make_pair(true, "");
+      }
+    case Exp::Type::SEARCHPRODUCTID:
+      {
+      again_search_product:
+	auto var = left_side->get_value_ptr();
+	if (var == nullptr)
+	  {
+	    var = new VarProduct;
+	    left_side->set_value_ptr(var);
+	  }
+	if (var->var_type != Var::VarType::Product)
+	  {
+	    left_side->free_value();
+	    goto again_search_product;
+	  }
+	auto search_exp = static_cast<SearchProductId*>(right_side);
+	static_cast<VarProduct*>(var)->product = search_exp->producto;
+	delete right_side;
+	return make_pair(true, "");
+      }
+    case Exp::Type::SEARCHPRODUCTREGEX:
+      {
+      again_search_product_regex:
+	auto var = left_side->get_value_ptr();
+	if (var == nullptr)
+	  {
+	    var = new VarList;
+	    left_side->set_value_ptr(var);
+	  }
+	else
+	  {
+	    left_side->free_value();
+	    goto again_search_product_regex;
+	  }
+	auto search_exp = static_cast<SearchProductsRegex*>(right_side);
+	search_exp->productos.for_each([var] (auto ptr)
+          {
+	    auto v = new VarProduct(*ptr);
+	    static_cast<VarList*>(var)->list.append(v);
+	  });
 	delete right_side;
 	return make_pair(true, "");
       }
@@ -471,7 +564,7 @@ ExecStatus Rm::execute()
   return make_pair(true, "");
 }
 
-ExecStatus Search::set_mapa() 
+ExecStatus Search::semant_mapa() 
 {
   stringstream s;
   Varname * mapa = var_tbl(mapa_name);
@@ -494,9 +587,9 @@ ExecStatus Search::set_mapa()
   return make_pair(true, "");
 }
 
-ExecStatus Search::semant() 
+ExecStatus Search::semant_string() 
 {
-  auto r = set_mapa();
+  auto r = semant_mapa();
   if (not r.first)
     return make_pair(false, r.second);
   assert(mapa_ptr != nullptr);
@@ -534,17 +627,20 @@ ExecStatus Search::semant()
     default:
       return make_pair(false, "id in search producer id is not an integer");
     }
+  return make_pair(true, "");
 }
 
-ExecStatus SearchProducerRif::compute()
+ExecStatus SearchProducerRif::semant()
 {
-  auto r = semant();
+  auto r = semant_string();
   if (not r.first)
     return make_pair(false, r.second);
   
+  cout << "Searching " << str << endl; 
   producer_ptr = mapa_ptr->tabla_productores(str);
   if (producer_ptr == nullptr)
     return make_pair(false, "Rif " + str + " not found");
+  delete exp;
   return make_pair(true, "");
 }
 
@@ -734,7 +830,7 @@ ExecStatus ListWrite::execute()
 
 ExecStatus SearchProducerRifCmd::execute()
 {
-  auto r = compute();
+  auto r = semant();
   if (not r.first)
     return make_pair(false, r.second);
 
@@ -745,22 +841,151 @@ ExecStatus SearchProducerRifCmd::execute()
   return make_pair(true, "");
 }
 
-ExecStatus SearchProducerRegex::compute()
+ExecStatus SearchProducerRegex::semant()
+{
+  auto r = semant_string();
+  if (not r.first)
+    return make_pair(false, r.second);
+  
+  try
+    {
+      producers = mapa_ptr->producers_by_name(str);
+    }
+  catch (regex_error & e)
+    {
+      stringstream s;
+      s << "Regular expression " << str << " " << e.what();
+      return make_pair(false, s.str());
+    }
+  
+  delete exp;
+  return make_pair(true, "");
+}
+
+ExecStatus SearchProducerRegexCmd::execute()
+{
+ auto r = semant();
+ if (not r.first)
+   return make_pair(false, r.second);
+ 
+ if (producers.is_empty())
+   {
+     cout << "Not matches found" << endl;
+     return make_pair(true, "");
+   }
+
+ producers.for_each([] (auto p)
+   {
+     cout << *p << endl;
+   });
+
+ return make_pair(true, "");
+}
+
+ExecStatus Search::semant_int()
+{
+  auto r = semant_mapa();
+  if (not r.first)
+    return make_pair(false, r.second);
+  assert(mapa_ptr != nullptr);
+  
+  r = exp->execute();
+  if (not r.first)
+    return make_pair(false, r.second);
+
+  switch (exp->type)
+    {
+    case Exp::Type::INTCONST:
+      id = static_cast<IntExp*>(exp)->value;
+      break;
+    case Exp::Type::VAR:
+      {
+	stringstream s;
+	auto varname = static_cast<Varname*>(exp);
+	auto var = varname->get_value_ptr();
+	if (var == nullptr)
+	  {
+	    s << "var name " << varname->name << " has not a value" << endl
+	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
+	    return make_pair(false, s.str());
+	  }
+	if (var->var_type != Var::VarType::Int)
+	  {
+	    s << "Var name " << varname->name << " is not an integer";
+	    return make_pair(false, s.str());
+	  }
+	id = static_cast<VarInt*>(var)->value;
+	break;
+      }
+    default: 
+      ERROR("SearchProductId::execute() invalid type %ld", exp->type);
+    }
+
+  return make_pair(true, "");
+}
+
+ExecStatus SearchProductId::semant()
+{
+  auto r = semant_int();
+  if (not r.first)
+    return make_pair(false, r.second);
+
+  assert(mapa_ptr != nullptr);
+
+  stringstream s;
+  auto ptr = mapa_ptr->tabla_productos(id);
+  if (ptr == nullptr)
+    {
+      s << "product id " << id << " not found";
+      return make_pair(false, s.str());
+    }
+  
+  producto = *ptr;
+  delete exp;
+  return make_pair(true, "");
+}
+
+ExecStatus SearchProductIdCmd::execute()
 {
   auto r = semant();
   if (not r.first)
     return make_pair(false, r.second);
-  
-  for (auto it = mapa_ptr->tabla_productores.get_it(); it.has_curr(); it.next())
+
+  cout << producto << endl;
+
+  return make_pair(true, "");
+}
+
+ExecStatus SearchProductsRegex::semant()
+{
+  auto r = semant_string();
+  if (not r.first)
+    return make_pair(false, r.second);
+
+  try
     {
-
+      productos = mapa_ptr->productos_by_nom(str);
     }
-  // producers = mapa_ptr->tabla_productores.filter([this] (auto p)
-  //   {
+  catch (regex_error & e)
+    {
+      stringstream s;
+      s << "Invalid regex " << str << " " << e.what() << endl;
+      return make_pair(false, s.str());
+    }
+ 
+  return make_pair(true, "");
+}
 
-  //   });
-  // producer_ptr = mapa_ptr->tabla_productores(str);
-  // if (producer_ptr == nullptr)
-  //   return make_pair(false, "Rif " + str + " not found");
+ExecStatus SearchProductsRegexCmd::execute()
+{
+  auto r = semant();
+  if (not r.first)
+    return make_pair(false, r.second);
+
+  if (productos.is_empty())
+    cout << "Empty" << endl;
+  else
+    productos.for_each([] (auto p) { cout << *p << endl; });
+
   return make_pair(true, "");
 }

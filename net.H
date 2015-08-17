@@ -88,7 +88,7 @@ struct MetaMapa
   }
 
   // Retorna unalista de productos cuyo nombre empareje la expresión tegular
-  DynList<MetaProducto*> productos_by_nom(const string & exp) const noexcept
+  DynList<MetaProducto*> productos_by_nom(const string & exp) const 
   {
     DynList<MetaProducto*> ret;
     regex reg(exp);
@@ -115,7 +115,7 @@ struct MetaMapa
     return ret;
   }
 
-  DynList<Productor*> productores_by_name(const string & exp) const noexcept
+  DynList<Productor*> producers_by_name(const string & exp) const 
   {
     DynList<Productor*> ret;
     regex reg(exp);
