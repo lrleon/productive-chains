@@ -4,46 +4,60 @@
 # define ENDL "\n"
 
 static const char * load =
-  "    LOAD <string-exp>" ENDL
-  ENDL
-  "Lee el mapa expresado por <string-exp> y retorna un operando" ENDL
-  "de tipo Mapa el cual puede almacenarse en una variable" ENDL
-  ENDL
-  "<string-exp> puede ser una constante string o una variable que" ENDL
-  "especifica el nombre del archivo donde se encuentra el mapa" ENDL 
-  ENDL
-  "Ejemplo:" ENDL
-  ENDL
-  "    data = \"data.txt\"" ENDL
-  "    mapa = load data" ENDL
-  ENDL;
+  R"(    LOAD <string-exp>" ENDL
+
+         Lee el mapa expresado por <string-exp> y retorna un operando
+         de tipo Mapa el cual puede almacenarse en una variable
+
+         <string-exp> puede ser una constante string o una variable que
+        especifica el nombre del archivo donde se encuentra el mapa
+
+  Ejemplo:
+
+      data = \"data.txt\"
+      mapa = load data
+  )";
 
 static const char * search =
-  "search define a una gama de comandos de busqueda" ENDL
-  ENDL
-  "Busqueda de productor por rif" ENDL
-  ENDL
-  "search producer <mapa-var> <rif-exp>" ENDL
-  ENDL
-  "    Busca productor segun <rif-exp> en el mapa <mapa-var> " ENDL
-  ENDL
-  "search producers <mapa-var> <reg-exp>" ENDL
-  ENDL
-  "    Busca en el mapa <mapa-var> todos los productores cuyo nombre" ENDL
-  "    encaje con la expresioon regular <reg-exp>" ENDL
-  ENDL
-  "search product id <mapa-var> <id-exp>" ENDL
-  ENDL 
-  "    Busca en el mapa <mapa-var> el producto identificado con <id-exp>" ENDL
-  ENDL
-  "search product regex <mapa-var> <id-exp>" ENDL
-  ENDL 
-  "    Busca en el mapa <mapa-var> todos los productos cuyo nombre encaje" ENDL
-  "    con la expresión regular <reg-exp>" ENDL
-  ENDL;
+  R"(search define a una gama de comandos de busqueda
 
-static const char * help =
-  "Ayuda basica para analizador de cadenas productivas" ENDL;
+     Busqueda de productor por rif
+
+     search producer <mapa-var> <rif-exp>
+
+         Busca productor segun <rif-exp> en el mapa <mapa-var> 
+
+     search producers <mapa-var> <reg-exp>
+
+         Busca en el mapa <mapa-var> todos los productores cuyo nombre
+         encaje con la expresioon regular <reg-exp>
+
+     search product id <mapa-var> <id-exp>
+
+         Busca en el mapa <mapa-var> el producto identificado con <id-exp>
+
+     search product regex <mapa-var> <id-exp>
+
+         Busca en el mapa <mapa-var> todos los productos cuyo nombre encaje
+         con la expresión regular <reg-exp>
+     )";
+
+static const char * help = 
+  R"(Ayuda basica para analizador de cadenas productivas
+
+     Puedes tipear 
+       
+         help <topico>
+
+     Para obtner una breve ayuda.
+
+     Posible, aunque seguramente incompleta, lista de tópicos:
+
+       load
+       search       
+
+     @ 2015 CENDITEL
+)";
 
 ExecStatus Help::execute()
 {
