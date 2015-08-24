@@ -63,7 +63,8 @@ struct MetaMapa
 
   MetaMapa() {}
 
-  MetaMapa(ifstream & in) : tabla_productores(in), tabla_productos(in)
+  MetaMapa(ifstream & in) 
+    : tabla_productores(in), tabla_productos(in), tabla_socios(in)
   {
     if (::verbose) 
       cout << "Loading Net ... " << endl;

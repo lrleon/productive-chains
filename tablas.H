@@ -160,6 +160,7 @@ struct TablaSocios : public DynSetTree<Socio, Avl_Tree, Socio::CmpLess>
 
 struct TablaMetaSocios : public DynArray<Socio>
 {
+  TablaMetaSocios() {}
   TablaMetaSocios(ifstream & in)
   {
     if (::verbose)

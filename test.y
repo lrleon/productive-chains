@@ -140,6 +140,14 @@ search_cmd: SEARCH PRODUCER VARNAME ref_exp
 	    {
 	      $$ = new SearchProductsRegexCmd($4, $5);
 	    }
+          | SEARCH PRODUCT COD VARNAME ref_exp
+	    {
+	      $$ = new SearchProductsCodCmd($4, $5);
+	    }
+          | SEARCH PRODUCT RIF VARNAME ref_exp
+	    {
+	      $$ = new SearchProductsRifCmd($4, $5);
+	    }
 ;
 
 exp : LOAD ref_exp
@@ -538,12 +546,12 @@ ExecStatus Info::execute()
       auto r = listread->execute();
       if (not r.first)
 	{
-	  delete index_exp;
 	  delete listread;
 	  return make_pair(false, r.second);
 	}
       cout << (*listread->val)->info() << endl;
       delete listread;
+      delete index_exp; 
       return make_pair(true, "");
     }
 
@@ -644,7 +652,7 @@ ExecStatus Search::semant_string()
 	if (value->var_type != Var::VarType::String)
 	  {
 	    s << "var name " << varname->name 
-	      << " does not correspond to an interger";
+	      << " does not correspond to an string";
 	    return make_pair(false, s.str());
 	  }
 	str = value->value;
@@ -1028,6 +1036,20 @@ ExecStatus SearchProductsCod::semant()
   return make_pair(true, "");
 }
 
+ExecStatus SearchProductsCodCmd::execute()
+{
+  auto r = semant();
+  if (not r.first)
+    return make_pair(false, r.second);
+
+  if (productos.is_empty())
+    cout << "Empty" << endl;
+  else
+    productos.for_each([] (auto p) { cout << *p << endl; });
+
+  return make_pair(true, "");
+}
+
 ExecStatus SearchProductsRif::semant()
 {
   auto r = semant_string();
@@ -1039,6 +1061,20 @@ ExecStatus SearchProductsRif::semant()
   return make_pair(true, "");
 }
 
+ExecStatus SearchProductsRifCmd::execute()
+{
+   auto r = semant();
+  if (not r.first)
+    return make_pair(false, r.second);
+
+  if (productos.is_empty())
+    cout << "Empty" << endl;
+  else
+    productos.for_each([] (auto p) { cout << *p << endl; });
+
+  return make_pair(true, "");
+}
+
 ExecStatus TypeInfo::execute()
 {
   if (index_exp)
@@ -1047,12 +1083,12 @@ ExecStatus TypeInfo::execute()
       auto r = listread->execute();
       if (not r.first)
 	{
-	  delete index_exp;
 	  delete listread;
 	  return make_pair(false, r.second);
 	}
       cout << (*listread->val)->type_info() << endl;
       delete listread;
+      delete index_exp;
       return make_pair(true, "");
     }
 

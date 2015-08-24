@@ -31,6 +31,10 @@ void process_comand_line(int argc, char *argv[])
 			false, "productos.txt", "nombre archivo metaproductos");
   cmd.add(productos);
 
+  ValueArg<string> socios("s", "socios", "nombre archivo socios", false,
+			  "socios.txt",  "nombre archivo socios");
+  cmd.add(socios);
+
   ValueArg<string> grafo("g", "archivo-grafo", "nombre archivo grafo", true,
 			 "grafo.txt", "nombre archivo grafo");
   cmd.add(grafo);
@@ -51,7 +55,6 @@ void process_comand_line(int argc, char *argv[])
 			   productores.getValue().c_str()));
   TablaProductores tabla_productores(productores_stream);
 
-  tabla_productores.autotest();
   tabla_productores.save(out);
 
   ifstream productos_stream(productos.getValue());
@@ -59,9 +62,15 @@ void process_comand_line(int argc, char *argv[])
     throw domain_error(fmt("No puedo abrir %s", productos.getValue().c_str()));
   TablaMetaProductos tabla_productos(productos_stream);
 
-  tabla_productos.autotest();
-  tabla_productos.save(out);  
-    
+  tabla_productos.save(out);
+
+  ifstream socios_stream(socios.getValue());
+  if (socios_stream.fail())
+    throw domain_error(fmt("No puedo abrir %s", socios.getValue().c_str()));
+  TablaMetaSocios tabla_socios(socios_stream);
+
+  tabla_socios.save(out);
+
   Net net = build_net(g, tabla_productores);
 
   save_net(net, tabla_productores, out);

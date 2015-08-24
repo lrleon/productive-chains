@@ -261,7 +261,7 @@ int main()
   yydebug = 1;
 # endif
 
-  signal (SIGINT,my_handler);
+  /* signal (SIGINT,my_handler); */
   // struct sigaction sigIntHandler;
   // sigIntHandler.sa_handler = my_handler;
   // sigemptyset(&sigIntHandler.sa_mask);

@@ -500,12 +500,24 @@ struct SearchProductsCod : public SearchProducts
   ExecStatus execute() { return semant(); }
 };
 
+struct SearchProductsCodCmd : public SearchProductsCod
+{
+  using SearchProductsCod::SearchProductsCod; 
+  ExecStatus execute();
+};
+
 struct SearchProductsRif : public SearchProducts
 {
   SearchProductsRif(const string & map_name, Exp * rif_exp)
     : SearchProducts(SEARCHPRODUCTRIF, map_name, rif_exp) {}
   ExecStatus semant();
   ExecStatus execute() { return semant(); }
+};
+
+struct SearchProductsRifCmd : public SearchProductsRif
+{
+  using SearchProductsRif::SearchProductsRif;
+  ExecStatus execute();
 };
 
 struct SearchNode : public Search
