@@ -152,7 +152,6 @@ struct Carga_Nodo
       new (ptr) Nodo(true, rif, nombre);
   }
 };
-  
 
 class Mapa
 {
@@ -169,6 +168,7 @@ public:
   long anho = -1;
 
   const TablaUnidadesEconomicas tabla_unidades;
+  const TablaSocios tabla_socios;
   const TablaPlantas tabla_plantas;
   const TablaProductos tabla_productos;
   const TablaInsumos tabla_insumos;
@@ -253,7 +253,7 @@ public:
 	  " para el año " << anho;
 	log.append(s.str());
 	return make_pair(DynList<SemiArco>(), "");
-      }
+      } 
 
     // recorre los proveedores de insumo y los separa en nacionales y extranj
     DynList<Fab> nac_list, ext_list;
@@ -372,15 +372,16 @@ public:
 
   Mapa(long __anho,
        const char * nom_unidades,
+       const char * nom_socios,
        const char * nom_plantas, 
        const char * nom_productos,
        const char * nom_insumos,
        const char * nom_prov_ins,
        const char * nom_proveedores,
        const char * nom_arcos)
-    : anho(__anho), tabla_unidades(nom_unidades), tabla_plantas(nom_plantas), 
-      tabla_productos(nom_productos), tabla_insumos(nom_insumos),
-      tabla_proveedor_insumo(nom_prov_ins, anho),
+    : anho(__anho), tabla_unidades(nom_unidades), tabla_socios(nom_socios),
+      tabla_plantas(nom_plantas), tabla_productos(nom_productos),
+      tabla_insumos(nom_insumos), tabla_proveedor_insumo(nom_prov_ins, anho),
       tabla_proveedores(nom_proveedores)
   {
     read_arcs(nom_arcos);

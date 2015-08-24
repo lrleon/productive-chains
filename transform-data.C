@@ -32,12 +32,22 @@ void process_comand_line(int argc, char *argv[])
 	  "productos.txt", "nombre dónde se escribirán los productos");
   cmd.add(pname);
 
+  ValueArg<string>
+    sname("A", "archivo-socios", "nombre archivos accionistas", false,
+	  "socios.txt", "nombre de archivo donde se escirben los socios");
+  cmd.add(sname);
+
        /****************** Archivos de entrada ****************/
   ValueArg<string>   // nom_unidades
     unidad_economica("u", "unidad-economica", "nombre archivo unidad economica",
 		     false, "unidad_economica.csv",
 		     "nombre archivo unidad economica");
   cmd.add(unidad_economica);
+
+  ValueArg<string> // nombre archivo socios
+    socios("S", "socios", "nombre archivo socios", false, 
+	   "unidadecon_socio.csv", "nombre archivo de socios");
+  cmd.add(socios);
 
   ValueArg<string> // nom_plantas
     subunidad_economica("s", "subunidad-economica",
@@ -90,7 +100,7 @@ void process_comand_line(int argc, char *argv[])
   verbose_cycles = feedback.getValue();
 
   Mapa mapa(anho.getValue(), unidad_economica.getValue().c_str(),
-	    subunidad_economica.getValue().c_str(), 
+	    socios.getValue().c_str(), subunidad_economica.getValue().c_str(), 
 	    produccion.getValue().c_str(), insumo.getValue().c_str(),
 	    proveedor_insumo.getValue().c_str(), proveedor.getValue().c_str(),
 	    arcos.getValue().c_str());
@@ -106,6 +116,7 @@ void process_comand_line(int argc, char *argv[])
   if (productores_out.fail())
     throw domain_error(fmt("No puedo crear %s", Pname.getValue().c_str()));
   TablaProductores tabla_productores(mapa.tabla_unidades,
+				     mapa.tabla_socios,
 				     mapa.tabla_proveedores,
 				     mapa.tabla_productos,
 				     mapa.tabla_plantas);
@@ -116,6 +127,11 @@ void process_comand_line(int argc, char *argv[])
     throw domain_error(fmt("No puedo crear %s", pname.getValue().c_str()));
   TablaMetaProductos tabla_productos(mapa.tabla_productos, tabla_productores);
   tabla_productos.save(productos_out);
+
+  ofstream socios_out(sname.getValue());
+  if (socios_out.fail())
+    throw domain_error(fmt("No puedo crear %s", sname.getValue().c_str()));
+  mapa.tabla_socios.save(socios_out);
 }
 
 

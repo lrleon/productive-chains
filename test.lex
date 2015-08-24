@@ -71,6 +71,11 @@ REGEX        [rR][eE][gG][eE][xX]
 LIST         [lL][iI][sS][tT]
 APPEND       [aA][pP][pP][eE][nN][dD]
 HELP         [hH][eE][lL][pP]
+COD          [cC][oO][dD]
+TYPE         [tT][yY][pP][eE]
+RIF          [rR][iI][fF]
+NODE         [nN][oO][dD][eE]
+ /* REACHABLE    [rR][eE][aA][cC][hH][aA][bB][lL][eE] */
 
 SPACE           [ \f\r\t\v]
 
@@ -101,8 +106,11 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
 {ID}         return ID;
 {LIST}       return LIST;
 {APPEND}     return APPEND;
-{HELP}       return HELP;
-
+{COD}        return COD;
+{TYPE}       return TYPEINFO;
+({HELP}|\?)  return HELP;
+{RIF}        return RIF;
+{NODE}       return NODE;
 
  /*
   * The single-characters tokens 

@@ -4,6 +4,7 @@
 
 
 # include <regex>
+# include <tpl_test_path.H>
 # include <grafo.H>
 
 using Net = Array_Graph<Graph_Anode<Productor*>, Graph_Aarc<Arco>>;
@@ -53,15 +54,16 @@ struct MetaMapa
 {
   mutable TablaProductores tabla_productores;
   mutable TablaMetaProductos tabla_productos;
+  mutable TablaMetaSocios tabla_socios;
   mutable Net net;
+  // Relation para conectividad
 
   using Node = Net::Node;
   using Arc = Net::Arc;
 
   MetaMapa() {}
 
-  MetaMapa(ifstream & in) 
-    : tabla_productores(in), tabla_productos(in)
+  MetaMapa(ifstream & in) : tabla_productores(in), tabla_productos(in)
   {
     if (::verbose) 
       cout << "Loading Net ... " << endl;
@@ -134,13 +136,34 @@ struct MetaMapa
     return tabla_productos(cod);
   }
 
-  DynList<Node*> search_node(const DynList<string> & // rifs
-			     )
+  Node * search_node(const Productor & prod) const noexcept
   {
-    DynList<Node*> ret;
-
-    return ret;
+    return net.search_node([&prod] (auto ptr) 
+			   {
+			     return ptr->get_info()->rif == prod.rif;
+			   });
   }
+
+  DynList<Node*> search_node_regex(const string & exp) const noexcept
+  {
+    regex reg(exp);
+    return net.filter_nodes([&reg] (auto p) 
+      {
+	return regex_search(p->get_info()->nombre, reg);
+      });
+  }
+
+  bool reachable(Node * src, Node * tgt) const
+  {
+    return Test_For_Path<Net>()(net, src, tgt);
+  }
+  // {
+  //   DynList<Node*> ret;
+
+  //   return ret;
+  // }
+
+  // Net build_subcomponent(
 
   // DynList<Node*> nodos_insumo
 };

@@ -30,7 +30,7 @@
 };
 
 %token LOAD SAVE EXIT ERROR INFO LS RM SEARCH PRODUCER PRODUCERS LIST APPEND
-%token PRODUCT ID REGEX HELP
+%token PRODUCT ID REGEX HELP COD TYPEINFO RIF NODE
 %token <symbol> STRCONST INTCONST VARNAME 
 
 %type <expr> exp
@@ -44,14 +44,8 @@
 %%
 
 line: /* empty line */ { $$ = line_commands = nullptr; }
-    | cmd_list '\n'
-      {
-	$$ = line_commands = $1;
-      }
-    | cmd_list
-      {
-	$$ = line_commands = $1;
-      }
+    | cmd_list '\n' { $$ = line_commands = $1; }
+    | cmd_list      { $$ = line_commands = $1; }
 ;
 
 cmd_list: cmd_unit
@@ -76,54 +70,38 @@ cmd_unit: EXIT
 		 << endl;
 	    exit(0);
 	  }
-        | INFO VARNAME
+        | INFO VARNAME                     { $$ = new Info($2); }
+        | VARNAME                          { $$ = new Info($1); }
+        | INFO VARNAME '[' ref_exp ']'     { $$ = new Info($2, $4); }
+        | VARNAME '[' ref_exp ']'          { $$ = new Info($1, $3); }
+        | TYPEINFO VARNAME                 { $$ = new TypeInfo($2); }
+        | TYPEINFO VARNAME '[' ref_exp ']' { $$ = new TypeInfo($2, $4); }
+        | VARNAME '=' exp                  { $$ = new Assign($1, $3); }
+        | VARNAME '[' ref_exp ']' '=' exp  { $$ = new ListWrite($1, $3, $6); }
+        | SAVE ref_exp ref_exp             { }
+        | LS                               { $$ = new Ls(); }
+        | RM rm_list                       { $$ = $2; }
+        | APPEND VARNAME item_list         
 	  {
-	    $$ = new Info($2);
-	  }
-        | VARNAME '=' exp
- 	  { 
-	    $$ = new Assign($1, $3);
-	  }
-        | VARNAME '[' ref_exp ']' '=' exp
-	  {
-	    $$ = new ListWrite($1, $3, $6);
-	  }
-        | SAVE ref_exp ref_exp
-	  {
-	    
-	  }
-        | VARNAME
-	  {
-	    $$ = new Info($1);
-	  }
-        | LS
-	  {
-	    $$ = new Ls();
-	  }
-        | RM rm_list
-  	  {
-	    $$ = $2;
-	  }
-        | APPEND VARNAME item_list
-	  {
-	    $$ = new Append($2, $3);
-	    delete $3;
+	    $$ = new Append($2, $3); delete $3;
 	  }
         | search_cmd { $$ = $1; }
         | help_exp { $$ = $1; }
 ;
 
-help_exp: HELP { $$ = new Help; }
-        | HELP LOAD { $$ = new Help(Exp::Type::MAP); }
-        | HELP SEARCH { $$ = new Help(Exp::Type::SEARCHPRODUCER); }
+help_exp: HELP          { $$ = new Help; }
+        | HELP LOAD     { $$ = new Help(Exp::Type::MAP); }
+        | HELP SEARCH   { $$ = new Help(Exp::Type::SEARCHPRODUCER); }
+        | HELP TYPEINFO { $$ = new Help(Exp::Type::TYPEINFO); }
+        | HELP INFO     { $$ = new Help(Exp::Type::INFO); }
 ;
 
 item_list: ref_exp 
-             {
-	       auto l = new DynList<Exp*>;
-	       l->append($1);
-	       $$ = l;
-	     }
+           {
+	     auto l = new DynList<Exp*>;
+	     l->append($1);
+	     $$ = l;
+	   }
          | item_list ref_exp 
 	   {
 	     auto l = $1;
@@ -196,6 +174,18 @@ exp : LOAD ref_exp
       {
 	$$ = new SearchProductsRegex($4, $5);
       }
+    | SEARCH PRODUCT COD VARNAME ref_exp
+      {
+	$$ = new SearchProductsCod($4, $5);
+      }
+    | SEARCH PRODUCT RIF VARNAME ref_exp
+      {
+	$$ = new SearchProductsRif($4, $5);
+      }
+    | SEARCH NODE VARNAME ref_exp
+      {
+	$$ = new SearchNode($3, $4);
+      }
 ;
 
 ref_exp : STRCONST
@@ -238,7 +228,6 @@ void yyerror(char const * s)
 {
   cout << "ERROR " << s << " " << endl;
 }
-
 
 ExecStatus Load::execute()
 {
@@ -426,8 +415,10 @@ ExecStatus Assign::execute()
 	return make_pair(true, "");
       }
     case Exp::Type::SEARCHPRODUCTREGEX:
+    case Exp::Type::SEARCHPRODUCTCOD:
+    case Exp::Type::SEARCHPRODUCTRIF:
       {
-      again_search_product_regex:
+      again_search_products:
 	auto var = left_side->get_value_ptr();
 	if (var == nullptr)
 	  {
@@ -437,14 +428,34 @@ ExecStatus Assign::execute()
 	else
 	  {
 	    left_side->free_value();
-	    goto again_search_product_regex;
+	    goto again_search_products;
 	  }
-	auto search_exp = static_cast<SearchProductsRegex*>(right_side);
+	auto search_exp = static_cast<SearchProducts*>(right_side);
 	search_exp->productos.for_each([var] (auto ptr)
           {
 	    auto v = new VarProduct(*ptr);
 	    static_cast<VarList*>(var)->list.append(v);
 	  });
+	delete right_side;
+	return make_pair(true, "");
+      }
+    case Exp::Type::SEARCHNODE:
+      {
+      again_search_node:
+	auto var = left_side->get_value_ptr();
+	if (var == nullptr)
+	  {
+	    var = new VarNode;
+	    left_side->set_value_ptr(var);
+	  }
+	else
+	  {
+	    left_side->free_value();
+	    goto again_search_node;
+	  }
+	auto search_exp = static_cast<SearchNode*>(right_side);
+	static_cast<VarNode*>(var)->net_ptr = &search_exp->mapa_ptr->net;
+        static_cast<VarNode*>(var)->node_ptr = search_exp->node_ptr;
 	delete right_side;
 	return make_pair(true, "");
       }
@@ -521,6 +532,21 @@ ExecStatus Assign::execute()
 
 ExecStatus Info::execute() 
 {
+  if (index_exp)
+    {
+      auto listread = new ListRead(name, index_exp);
+      auto r = listread->execute();
+      if (not r.first)
+	{
+	  delete index_exp;
+	  delete listread;
+	  return make_pair(false, r.second);
+	}
+      cout << (*listread->val)->info() << endl;
+      delete listread;
+      return make_pair(true, "");
+    }
+
   stringstream s;
   s << "var " << name << ": ";
   Varname * varname = var_tbl(name);
@@ -534,6 +560,7 @@ ExecStatus Info::execute()
   
   auto var = varname->get_value_ptr();
   assert(var);
+
   s << var->info();
   cout << s.str();
   return make_pair(true, "");
@@ -599,7 +626,6 @@ ExecStatus Search::semant_string()
     return make_pair(false, res.second);
 
   stringstream s;
-
   switch (exp->type)
     {
     case STRCONST: 
@@ -640,7 +666,7 @@ ExecStatus SearchProducerRif::semant()
   producer_ptr = mapa_ptr->tabla_productores(str);
   if (producer_ptr == nullptr)
     return make_pair(false, "Rif " + str + " not found");
-  delete exp;
+  free();
   return make_pair(true, "");
 }
 
@@ -858,7 +884,7 @@ ExecStatus SearchProducerRegex::semant()
       return make_pair(false, s.str());
     }
   
-  delete exp;
+  free();
   return make_pair(true, "");
 }
 
@@ -941,7 +967,7 @@ ExecStatus SearchProductId::semant()
     }
   
   producto = *ptr;
-  delete exp;
+  free();
   return make_pair(true, "");
 }
 
@@ -973,6 +999,7 @@ ExecStatus SearchProductsRegex::semant()
       return make_pair(false, s.str());
     }
  
+  free();
   return make_pair(true, "");
 }
 
@@ -987,5 +1014,106 @@ ExecStatus SearchProductsRegexCmd::execute()
   else
     productos.for_each([] (auto p) { cout << *p << endl; });
 
+  return make_pair(true, "");
+}
+
+ExecStatus SearchProductsCod::semant()
+{
+  auto r = semant_string();
+  if (not r.first)
+    return make_pair(false, r.second);
+
+  productos = mapa_ptr->productos_by_cod_aran(str);
+  free();
+  return make_pair(true, "");
+}
+
+ExecStatus SearchProductsRif::semant()
+{
+  auto r = semant_string();
+  if (not r.first)
+    return make_pair(false, r.second);
+
+  productos = mapa_ptr->productos_by_rif(str);
+  free();
+  return make_pair(true, "");
+}
+
+ExecStatus TypeInfo::execute()
+{
+  if (index_exp)
+    {
+      auto listread = new ListRead(name, index_exp);
+      auto r = listread->execute();
+      if (not r.first)
+	{
+	  delete index_exp;
+	  delete listread;
+	  return make_pair(false, r.second);
+	}
+      cout << (*listread->val)->type_info() << endl;
+      delete listread;
+      return make_pair(true, "");
+    }
+
+  Varname * varname = var_tbl(name);
+  if (varname == nullptr)
+    {
+      cout << "Var name " << name << " not found" << endl;
+      return make_pair(true, "");
+    }
+
+  auto var = varname->get_value_ptr();
+  if (var == nullptr)
+    {
+      stringstream s;
+      s << "var name " << varname->name << " has not a value" << endl
+	<< "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
+      return make_pair(false, s.str());
+    }
+
+  cout << var->type_info() << endl;
+
+  return make_pair(true, "");
+}
+
+ExecStatus SearchNode::execute()
+{
+  auto r = semant_mapa();
+  if (not r.first)
+    return make_pair(false, r.second);
+  assert(mapa_ptr != nullptr);
+
+  auto res = exp->execute();
+  if (not res.first)
+    return make_pair(false, res.second);
+
+  stringstream s;
+  if (exp->type != VAR)
+    {
+      s << "Producer operand is not a producer var";
+      return make_pair(false, s.str());
+    }
+
+  Varname * varname = static_cast<Varname*>(exp);
+  VarProducer * value = static_cast<VarProducer*>(varname->get_value_ptr());
+  if (value == nullptr)
+    {
+      s << "var name " << varname->name << " has not a value" << endl
+	<< "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
+      return make_pair(false, s.str());
+    }
+
+  if (value->var_type != Var::VarType::Producer)
+    {
+      s << "var name " << varname->name << " is not a producer type";
+      return make_pair(false, s.str());
+    }
+
+  node_ptr = mapa_ptr->search_node(value->productor);
+  if (node_ptr == nullptr)
+    return make_pair(false, "Producer not found");
+
+  free();  
   return make_pair(true, "");
 }

@@ -123,3 +123,9 @@ test: test.lex test.y net-parser.H net-symtbl.H net-tree.H $(OBJ)
 	$(YACC) -d -t --report-=all test.y
 	$(CXX) $(FLAGS) $(INCLUDE) -c test.tab.c
 	$(CXX) $(FLAGS) $(INCLUDE) test.C -o test test.tab.o $(OBJ) -lreadline $(LIBS)
+
+test-op: test.lex test.y net-parser.H net-symtbl.H net-tree.H $(OBJ)
+	$(FLEX) -o test.C test.lex 
+	$(YACC) -d -t --report-=all test.y
+	$(CXX) $(OPT) $(INCLUDE) -c test.tab.c
+	$(CXX) $(OPT) $(INCLUDE) test.C -o test test.tab-op.o $(OBJ) -lreadline $(LIBS)

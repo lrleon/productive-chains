@@ -1,16 +1,14 @@
 
 # include <net-tree.H>
 
-# define ENDL "\n"
-
 static const char * load =
-  R"(    LOAD <string-exp>" ENDL
+  R"(LOAD <string-exp>"
 
-         Lee el mapa expresado por <string-exp> y retorna un operando
-         de tipo Mapa el cual puede almacenarse en una variable
+  Lee el mapa expresado por <string-exp> y retorna un operando
+  de tipo Mapa el cual puede almacenarse en una variable
 
-         <string-exp> puede ser una constante string o una variable que
-        especifica el nombre del archivo donde se encuentra el mapa
+  <string-exp> puede ser una constante string o una variable que
+  especifica el nombre del archivo donde se encuentra el mapa
 
   Ejemplo:
 
@@ -40,6 +38,16 @@ static const char * search =
 
          Busca en el mapa <mapa-var> todos los productos cuyo nombre encaje
          con la expresión regular <reg-exp>
+
+     search product cod <mapa-var> <cod-aran>
+
+         Busca en el mapa <mapa-var> todos los productos cuyo codigo
+         arancelario sea <cod-aran>
+
+     search product rif <mapa-var> <rif>
+
+         Busca en el mapa <mapa-var> todos los productos producidos por
+         el ente productivo con rif <rif>
      )";
 
 static const char * help = 
@@ -49,7 +57,7 @@ static const char * help =
        
          help <topico>
 
-     Para obtner una breve ayuda.
+     Para obtener una breve ayuda sobre un tema de interes.
 
      Posible, aunque seguramente incompleta, lista de tópicos:
 
@@ -58,6 +66,29 @@ static const char * help =
 
      @ 2015 CENDITEL
 )";
+
+static const char * typeinfo =
+R"(Informacion basica de una variable
+   
+     type <nom-var>
+
+   Retorna el tipo de variable y en caso de que se trate de una lista 
+   retorna su longitud
+   )";
+
+static const char * info =
+R"(Informacion sobre una variable y su contenido
+   
+     info <nom-var>
+
+   Retorna el tipo de variable y el contenido completo de la variable
+
+   CUIDADO: si la variable es una lista, entonces todo su contenido es
+            mostrado. 
+
+   NOTA: Puedes prescindir de la palabra info y simplemente tipear el nombre
+         de la variable
+   )";
 
 ExecStatus Help::execute()
 {
@@ -69,7 +100,9 @@ ExecStatus Help::execute()
     case SEARCHPRODUCER:
     case SEARCHPRODUCERREGEX:
     case SEARCHPRODUCTID:
-    case SEARCHPRODUCTREGEX: cout << ::search; break;      
+    case SEARCHPRODUCTREGEX: cout << ::search; break;    
+    case TYPEINFO: cout << typeinfo << endl; break;
+    case INFO: cout << info << endl; break;
     default: cout << "No help topic" << endl; break;
     }
   return make_pair(true, "");

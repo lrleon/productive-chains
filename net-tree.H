@@ -40,7 +40,9 @@ struct Exp : public ASTNode
 {
   enum Type { MAP, LIST, STRCONST, INTCONST, VAR, ASSIGN, INFO, LS, RM, 
 	      SEARCHPRODUCER, APPEND, LISTREAD, LISTWRITE, SEARCHPRODUCERREGEX,
-	      SEARCHPRODUCTID, SEARCHPRODUCTREGEX, HELP, ERROR } type;
+	      SEARCHPRODUCTID, SEARCHPRODUCTREGEX, SEARCHPRODUCTCOD,
+	      SEARCHPRODUCTRIF, SEARCHNODE, NODE,
+	      TYPEINFO, HELP, ERROR } type;
 
   string type_string() const
   {
@@ -59,12 +61,15 @@ struct Exp : public ASTNode
       case SEARCHPRODUCERREGEX: return "SEARCHPRODUCERREGEX";
       case SEARCHPRODUCTID: return "SEARCHPRODUCTID";
       case SEARCHPRODUCTREGEX: return "SEARCHPRODUCTREGEX";
+      case SEARCHPRODUCTCOD: return "SEARCHPRODUCTCOD";
+      case SEARCHNODE: return "SEARCHNODE";
       case HELP: return "HELP";
+      case TYPEINFO: return "TYPEINFO";
       case APPEND: return "APPEND";
       case LISTREAD: return "LISTREAD";
       case LISTWRITE: return "LISTWRITE";
-      default:
-	ERROR("Tipo de expresion invalido");
+      case NODE: return "NODE";
+      default: ERROR("Tipo de expresion invalido");
       }
     return string("INVALID");
   }
@@ -114,13 +119,14 @@ struct Append : public Exp
 
 struct Var
 {
-  enum VarType { Map, List, String, Int, Producer, Product } var_type;
+  enum VarType { Map, List, String, Int, Producer, Product, Node } var_type;
 
   Var(VarType type) : var_type(type) {}
 
   virtual ~Var() {} // virtual para poder liberar recursos de las derivadas
 
   virtual string info() const = 0;
+  virtual string type_info() const = 0;
   virtual Var * clone() const = 0;
   virtual void copy(Var * src) = 0;
 
@@ -134,6 +140,7 @@ struct Var
       case Int: return string("Int");
       case Producer: return string("Producer");
       case Product: return string("Product");
+      case Node: return string("Node");
       default: ERROR("Invalid type %ld", var_type);
       }
     return string("Var::type_string() var_type invalid");
@@ -185,17 +192,31 @@ public:
 struct Info : public Exp
 {
   const string name;
+  Exp * index_exp = nullptr;
 
   Info(char * nom) : Exp(INFO), name(nom) {}
 
+  Info(char * nom, Exp * exp) : Exp(INFO), name(nom), index_exp(exp) {}
+
   ExecStatus execute();
-  void free() {}
+  void free() { if (index_exp) delete index_exp; }
 };
 
 struct Ls : public Exp
 {
   Ls() : Exp(LS) {}
 
+  ExecStatus execute();
+  void free() {}
+};
+
+struct TypeInfo : public Exp
+{
+  string name;
+  Exp * index_exp = nullptr;
+  TypeInfo(const string & n) : Exp(TYPEINFO), name(n) {}
+  TypeInfo(const string & n, Exp * exp) 
+    : Exp(TYPEINFO), name(n), index_exp(exp) {}
   ExecStatus execute();
   void free() {}
 };
@@ -224,7 +245,6 @@ struct VarMap : public Var
 
   VarMap * clone() const { return new VarMap(); }
   void copy(Var * src) { value = static_cast<VarMap*>(src)->value; }
-
   string info() const 
   {
     stringstream s;
@@ -235,6 +255,22 @@ struct VarMap : public Var
       << "    " << value.net.esize() << " arcs" << endl;
     return s.str();
   }
+  string type_info() const { return info(); }
+};
+
+struct VarNode : public Var
+{
+  Net * net_ptr = nullptr;
+  Net::Node * node_ptr = nullptr;
+
+  VarNode() : Var(Node) {}
+  VarNode * clone() const { return new VarNode; }
+  void copy(Var * src) { *this = *static_cast<VarNode*>(src); }
+  string info() const
+  {
+    return "Var node pointing to producer: " + node_ptr->get_info()->to_string();
+  }
+  string type_info() const { return "Var node on a map"; }
 };
 
 struct VarList : public Var
@@ -269,6 +305,11 @@ struct VarList : public Var
     s << endl;
     return s.str();
   }
+
+  string type_info() const 
+  {
+    return "List var with " + to_string(list.size()) + " items";
+  }
 };
 
 struct VarString : public Var
@@ -280,6 +321,7 @@ struct VarString : public Var
   void copy(Var * src) { value = static_cast<VarString*>(src)->value; }
 
   string info() const { return "String var: \"" + value + "\"\n"; }
+  string type_info() const { return "String var"; }
 };
 
 struct VarInt : public Var
@@ -289,7 +331,8 @@ struct VarInt : public Var
 
   VarInt * clone() const { return new VarInt; }
   void copy(Var * src) { value = static_cast<VarInt*>(src)->value; }
-  string info() const { return "Int var: " + to_string(value) + '\n'; }
+  string info() const { return "Int var: " + to_string(value); }
+  string type_info() const { return "Int var"; }
 };
 
 struct IntExp : public Exp
@@ -314,6 +357,7 @@ struct VarProducer : public Var
     productor = static_cast<VarProducer*>(src)->productor; 
   }
   string info() const { return "Producer var: " + productor.to_string(); }
+  string type_info() const { return "Producer var"; }
 };
 
 struct VarProduct : public Var
@@ -325,6 +369,7 @@ struct VarProduct : public Var
   Var * clone() const { return new VarProduct; }
   void copy(Var * src) { product = static_cast<VarProduct*>(src)->product; }
   string info() const { return "Product var: " + product.to_string(); }
+  string type_info() const { return "Product var"; }
 };
 
 struct ListAccess
@@ -373,7 +418,7 @@ struct Search : public Exp
   ExecStatus semant_mapa();
   ExecStatus semant_string();
   ExecStatus semant_int();
-  void free() { delete exp; }
+  void free() { if (exp->type != Exp::Type::VAR)delete exp; }
 };
 
 struct SearchProducerRif : public Search
@@ -444,6 +489,31 @@ struct SearchProductsRegex : public SearchProducts
 struct SearchProductsRegexCmd : public SearchProductsRegex
 {
   using SearchProductsRegex::SearchProductsRegex;
+  ExecStatus execute();
+};
+
+struct SearchProductsCod : public SearchProducts
+{
+  SearchProductsCod(const string & map_name, Exp * cod_exp)
+    : SearchProducts(SEARCHPRODUCTCOD, map_name, cod_exp) {}
+  ExecStatus semant();
+  ExecStatus execute() { return semant(); }
+};
+
+struct SearchProductsRif : public SearchProducts
+{
+  SearchProductsRif(const string & map_name, Exp * rif_exp)
+    : SearchProducts(SEARCHPRODUCTRIF, map_name, rif_exp) {}
+  ExecStatus semant();
+  ExecStatus execute() { return semant(); }
+};
+
+struct SearchNode : public Search
+{
+  Net::Node * node_ptr = nullptr;
+
+  SearchNode(const string & map_name, Exp * prod_exp) 
+    : Search(SEARCHNODE, map_name, prod_exp) {}
   ExecStatus execute();
 };
 

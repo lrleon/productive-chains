@@ -16,27 +16,180 @@ using Uid = unsigned long;
 
 using fmt = gnu::autosprintf;
 
-// template <typename Key, class Cmp>
-// using HashType = OLhashTable<Key, Cmp>;
-
 template <typename Key, class Cmp>
 using HashType = DynSetHash<Key, Cmp>;
 
 template <class T>
 struct CmpLessId
 {
-  bool operator () (const T & i1, const T & i2) const { return i1.id < i2.id; }
+  bool operator () (const T & i1, const T & i2) const noexcept
+  { return i1.id < i2.id; }
 };
 
 template <class T>
 struct CmpEqualId
 {
-  bool operator () (const T & i1, const T & i2) const { return i1.id == i2.id; }
+  bool operator () (const T & i1, const T & i2) const noexcept
+  { return i1.id == i2.id; }
 };
 
 
 template <class T>
 size_t hash_id(const T & i) { return SuperFastHash(i.id); }
+
+struct Socio
+{
+  string rif;
+  string nombre;
+  char nacionalidad;
+  
+  // lista de empresas en la cual this es accionista. Son pares rif-empresa y %
+  DynList<pair<string, float>> empresas; 
+
+  Socio() {}
+  Socio(const string & r, const string & nom, char nac) 
+    : rif(r), nombre(nom), nacionalidad(nac) {}
+  Socio(const string & r) : rif(r) {}
+
+  struct CmpLess
+  {
+    bool operator ()(const Socio & s1, const Socio & s2) const noexcept
+    { return s1.rif < s2.rif; }
+  };
+
+  string to_string() const
+  {
+    string ret(rif + " " + nacionalidad + " " +
+	       nombre + "\n" + "  Accionistas: ");
+    empresas.for_each([&ret] (auto p) 
+		      {
+			ret += p.first + " " + ::to_string(p.second);
+		      });
+    return ret;
+  }
+
+  friend ostream & operator << (ostream & out, const Socio & s)
+  {
+    return out << s.to_string() << endl;
+  }
+
+  void save(ostream & out) const 
+  {
+    out << rif << endl
+	<< nombre << endl
+	<< nacionalidad << endl
+	<< empresas.size();
+    empresas.for_each([&out] (auto p) 
+		      { 
+			out << " " << p.first << " " << p.second; 
+		      });
+    out << endl;
+  }
+
+  void load(istream & in)
+  {
+    in >> rif;
+    in.ignore();
+    getline(in, nombre);
+    in >> nacionalidad;
+    size_t n;
+    in >> n;
+    for (size_t i = 0; i < n; ++i)
+      {
+	pair<string, float> p;
+	in >> p.first >> p.second;
+	empresas.append(p);
+      }
+  }
+};
+
+struct TablaSocios : public DynSetTree<Socio, Avl_Tree, Socio::CmpLess>
+{
+  TablaSocios(const char * name)
+  {
+    ifstream in(name);
+    if (in.fail()) 
+      throw std::domain_error(fmt("No se pudo abrir %s", name));
+
+    if (::verbose)
+      cout << "Reading socios ..." << endl;
+
+    size_t empty_counter = 0;
+    auto header = csv_read_row(in, ','); 
+    const size_t n = header.size();
+    for (size_t i = 0; in.good(); ++i)
+      {
+	auto row = csv_read_row(in, ',');
+	if (row.size() != n)
+	  throw domain_error(fmt("number of fields of row %d is not %d",
+				 row.size(), n));
+	
+	char nac = stoi(row(5)) == 1 ? 'V' : 'E';
+	const string & unidad_economica_rif = row(2);
+	string & rif_pasaporte = row(3);
+	if (rif_pasaporte == "" or rif_pasaporte.size() == 0)
+	  {
+	    stringstream s;
+	    s << "Sin-numero-" << empty_counter++;
+	    rif_pasaporte = s.str();
+	  }
+	auto s = search_or_insert(Socio(rif_pasaporte, row(4), nac));
+	s->empresas.append(make_pair(unidad_economica_rif, stof(row(7))));
+      }
+    if (::verbose)
+      cout << "done!" << endl
+	   << endl;
+  }
+
+  Socio * operator () (const string & rif) const 
+  {
+    return search(Socio(rif));
+  }
+
+  void save(ostream & out) const
+  {
+    if (::verbose)
+      cout << "Saving socios ..." << endl;
+    out << size() << endl;
+    for_each([&out] (auto s) { s.save(out); });
+    if (::verbose)
+      cout << "done!" << endl
+	   << endl;
+  }
+};
+
+struct TablaMetaSocios : public DynArray<Socio>
+{
+  TablaMetaSocios(ifstream & in)
+  {
+    if (::verbose)
+      cout << "Reading socios ..." << endl;
+    size_t n;
+    in >> n;
+    reserve(n);
+    for (size_t i = 0; i < n; ++i)
+      access(i).load(in);
+    if (::verbose)
+      cout << "done!" << endl
+	   << endl;
+  }
+
+  void save(ostream & out) const
+  {
+    if (::verbose)
+      cout << "Saving socios ..." << endl;
+    out << size() << endl;
+    for_each([&out] (auto s) { s.save(out); });
+    if (::verbose)
+      cout << "done!" << endl
+	   << endl;
+  }
+
+  Socio * operator () (const string & rif) const noexcept
+  {
+    return bsearch(*this, Socio(rif), Socio::CmpLess());
+  }  
+};
 
 struct UnidadEconomica
 {
@@ -63,13 +216,12 @@ struct UnidadEconomica
   };
 };
 
-
 struct TablaUnidadesEconomicas 
   : public HashType<UnidadEconomica, UnidadEconomica::CmpEqual>
 {
   using HashTable = HashType<UnidadEconomica, UnidadEconomica::CmpEqual>;
 
-  static size_t hash(const UnidadEconomica & u)
+  static size_t hash(const UnidadEconomica & u) noexcept
   {
     return SuperFastHash(u.rif);
   }
@@ -118,7 +270,7 @@ struct Planta
 
   Planta(Uid i = -1) noexcept : id(i) {}
 
-  Planta(Uid i, const string & r, const string & str) noexcept
+  Planta(Uid i, const string & r, const string & str) 
     : id(i), rif(r), nombre(str) {}
 
   string to_string() const
@@ -168,7 +320,6 @@ struct TablaPlantas : public HashType<Planta, Planta::CmpEqual>
   }
 };
 
-
 struct Producto
 {
   Uid id;
@@ -186,9 +337,9 @@ struct Producto
   // para filtrar arcos en un grafo
   DynMapTree<Uid, double> comb;
 
-  Producto(Uid i = -1) noexcept : id(i) {}
+  Producto(Uid i = -1) : id(i) {}
 
-  Producto(Uid i, const string & nom, const string & cod, Uid pla_id) noexcept
+  Producto(Uid i, const string & nom, const string & cod, Uid pla_id) 
   : id(i), nombre(nom), planta_id(pla_id), cod_aran(cod) {}
 
   Producto(Uid pid, const string & cod) : planta_id(pid), cod_aran(cod) {}
@@ -326,9 +477,9 @@ struct ProveedorInsumo
   double monto;
   double cantidad;
 
-  ProveedorInsumo(Uid i = -1) : id(i) {}
+  ProveedorInsumo(Uid i = -1) noexcept : id(i) {}
 
-  ProveedorInsumo(Uid i, Uid pid, Uid iid, double m, double cant)
+  ProveedorInsumo(Uid i, Uid pid, Uid iid, double m, double cant) noexcept
     : id(i), proveedor_id(pid), insumo_id(iid), monto(m), cantidad(cant) {}
 
   string to_string() const
@@ -427,9 +578,9 @@ struct Proveedor
     return out << p.to_string();
   }
 
-  bool es_nacional() const { return nacional; }
+  bool es_nacional() const noexcept { return nacional; }
 
-  bool es_extranjero() const { return not es_nacional(); }
+  bool es_extranjero() const noexcept { return not es_nacional(); }
 };
 
 struct TablaProveedores : public HashType<Proveedor, CmpEqualId<Proveedor>>
@@ -465,7 +616,7 @@ struct TablaProveedores : public HashType<Proveedor, CmpEqualId<Proveedor>>
 	   << endl;
   }
 
-  Proveedor * operator () (Uid id) const
+  Proveedor * operator () (Uid id) const 
   {
     auto p = search(Proveedor(id));
     if (p == nullptr)
@@ -508,6 +659,17 @@ struct Productor
   //                    cod_aran
   DynSetTree<tuple<Uid, string>> productos; // productos que fabrica y/o vende
 
+      // Lista de socios accionistas. Cada par es rif accionista y %
+  DynList<pair<string, float>> socios; 
+
+  float total_accionistas() const noexcept
+  {
+    return socios.foldl<float>(0.0, [] (float acu, auto p)
+  			       {
+  				 return acu + p.second;
+  			       });
+  }
+
   Productor() {}
 
   Productor(bool nac, const string & r, const string & nom)
@@ -540,6 +702,10 @@ struct Productor
 		       {
 			 out << BLANK << get<0>(p) << BLANK << get<1>(p);
 		       }); 
+    out << endl
+    	<< socios.size();
+    socios.for_each([&out] (auto p)
+    		    { out << BLANK << p.first << BLANK << p.second; });
     out << endl;
   }
 
@@ -567,12 +733,19 @@ struct Productor
 	in >> id >> cod_aran;
 	productos.append(make_tuple(id, cod_aran));
       }
+    in >> n;                // leer socios
+    for (auto i = 0; i < n; ++i)
+      {
+    	pair<string, float> p;
+    	in >> p.first >> p.second;
+    	socios.append(p);
+      }
   }
 
-  bool es_nacional() const { return nacional; }
-  bool es_extranjero() const { return not nacional; }
+  bool es_nacional() const noexcept { return nacional; }
+  bool es_extranjero() const noexcept { return not nacional; }
 
-  friend bool operator < (const Productor & p1, const Productor & p2) 
+  friend bool operator < (const Productor & p1, const Productor & p2) noexcept
   {
     return p1.rif < p2.rif;
   }
@@ -585,7 +758,7 @@ struct MetaProducto
   string cod_aran;
   string nombre;
   DynSetTree<string> productores; // lista de rif de productores 
-  DynMapTree<Uid, double> comb;
+  DynMapTree<Uid, double> comb;   // lista uid insumo, cantidad
 
   string to_string() const
   {
@@ -629,14 +802,14 @@ struct MetaProducto
     in.ignore();
     getline(in, nombre);
     size_t n;
-    in >> n;
+    in >> n;                // leer productores
     for (auto i = 0; i < n; ++i)
       {
 	string rif;
 	in >> rif;
 	productores.append(rif);
       }
-    in >> n;
+    in >> n;                // leer fromula insumos
     for (auto i = 0; i < n; ++i)
       {
 	Uid id;
@@ -652,6 +825,7 @@ struct TablaProductores;
 struct TablaMetaProductos : public DynArray<MetaProducto>
 {
   typedef bool (*CmpCod)(const MetaProducto &, const MetaProducto &);
+
   CmpCod cmp_cod = [] (const MetaProducto & p1, const MetaProducto & p2)
   { return p1.cod_aran < p2.cod_aran; };
 
@@ -792,9 +966,24 @@ struct TablaProductores : public DynArray<Productor>
       cout << "    done" << endl;
   }
 
+  void adjuntar_socios(const TablaSocios & tabla_socios)
+  {
+    tabla_socios.for_each([this] (const Socio & s)
+      {
+  	s.empresas.for_each([this, &s] (auto p)
+          {
+  	    auto prod_ptr = (*this)(p.first);
+  	    if (prod_ptr == nullptr)
+  	      throw domain_error("adjuntar_socios(): rif unidad ecom no esta");
+  	    prod_ptr->socios.append(make_pair(s.rif, p.second));
+  	  });
+      });
+  }
+
   TablaProductores() {}
 
   TablaProductores(const TablaUnidadesEconomicas & tabla_ue,
+		   const TablaSocios &             tabla_socios,
 		   const TablaProveedores &        tabla_proveedores,
 		   const TablaProductos &          tabla_productos,
 		   const TablaPlantas &            tabla_plantas)
@@ -844,6 +1033,7 @@ struct TablaProductores : public DynArray<Productor>
     tree.empty();
     
     adjuntar_productos(tabla_productos, tabla_plantas);
+    adjuntar_socios(tabla_socios);
   }
   
   // Solo funciona para los nacionales 
