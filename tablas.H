@@ -1048,25 +1048,11 @@ struct TablaProductores : public DynArray<Productor>
   // Determina el índice en la tabla de la entrada ptr
   size_t operator () (Productor * ptr) const
   {
-    long ret;
-    if (ptr->es_nacional())
-      {
-	ret = binary_search(*this, *ptr);
-	if (ret < 0)
-	  throw domain_error("TablaProductores (): productor no encontrado");
-	assert(ptr == &access(ret));
-	return ret;
-      }
-
-    auto l = binary_search_dup(*this, *ptr).filter([this, ptr] (auto i)
-      {
-	return &access(i) == ptr;
-      });
-    if (l.is_empty())
-      throw domain_error("TablaProductores (): productor ext no encontrado");
-
-    assert(&access(l.get_first()) == ptr);
-    return l.get_first();
+    long ret = binary_search(*this, *ptr);
+    if (ret < 0)
+      throw domain_error("TablaProductores (): productor no encontrado");
+    assert(ptr == &access(ret));
+    return ret;
   }
 
   void save(ostream & out) const

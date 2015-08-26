@@ -41,7 +41,7 @@ struct Exp : public ASTNode
   enum Type { MAP, LIST, STRCONST, INTCONST, VAR, ASSIGN, INFO, LS, RM, 
 	      SEARCHPRODUCER, APPEND, LISTREAD, LISTWRITE, SEARCHPRODUCERREGEX,
 	      SEARCHPRODUCTID, SEARCHPRODUCTREGEX, SEARCHPRODUCTCOD,
-	      SEARCHPRODUCTRIF, SEARCHNODE, NODE,
+	      SEARCHPRODUCTRIF, SEARCHNODE, NODE, NET, CONNECTED,
 	      TYPEINFO, HELP, ERROR } type;
 
   string type_string() const
@@ -69,6 +69,8 @@ struct Exp : public ASTNode
       case LISTREAD: return "LISTREAD";
       case LISTWRITE: return "LISTWRITE";
       case NODE: return "NODE";
+      case NET: return "NET";
+      case CONNECTED: return "CONNECTED";
       default: ERROR("Tipo de expresion invalido");
       }
     return string("INVALID");
@@ -119,7 +121,8 @@ struct Append : public Exp
 
 struct Var
 {
-  enum VarType { Map, List, String, Int, Producer, Product, Node } var_type;
+  enum VarType { Map, List, String, Int, Producer, Product, Node, 
+		 Subnet} var_type;
 
   Var(VarType type) : var_type(type) {}
 
@@ -141,6 +144,7 @@ struct Var
       case Producer: return string("Producer");
       case Product: return string("Product");
       case Node: return string("Node");
+      case Subnet: return string("Subnet");
       default: ERROR("Invalid type %ld", var_type);
       }
     return string("Var::type_string() var_type invalid");
@@ -218,7 +222,24 @@ struct TypeInfo : public Exp
   TypeInfo(const string & n, Exp * exp) 
     : Exp(TYPEINFO), name(n), index_exp(exp) {}
   ExecStatus execute();
-  void free() {}
+  void free() { if (index_exp) delete index_exp; }
+};
+
+struct Connected : public Exp
+{
+  const string mapa_name;
+  Exp * src_exp = nullptr;
+  Exp * tgt_exp = nullptr;
+  MetaMapa * mapa_ptr = nullptr;
+  Net::Node * src = nullptr;
+  Net::Node * tgt = nullptr;
+  Connected(const string & name, Exp * src, Exp * tgt) 
+    : Exp(CONNECTED), mapa_name(name), src_exp(src), tgt_exp(tgt) {}
+      // Valida que exp sea rif, producer o nodo y pone el el nodo en ptr
+  ExecStatus semant_mapa();
+  ExecStatus semant_exp(Exp * exp, Net::Node *& ptr);
+  ExecStatus execute();
+  void free() { delete src_exp; delete tgt_exp; }
 };
 
 struct Help : public Exp
@@ -248,11 +269,14 @@ struct VarMap : public Var
   string info() const 
   {
     stringstream s;
+    auto num_blks = value.relation.get_num_blocks();
     s << "Map var:" << endl
       << "    " << value.tabla_productores.size() << " producers" << endl
       << "    " << value.tabla_productos.size() << " products" << endl
       << "    " << value.net.vsize() << " nodes" << endl
-      << "    " << value.net.esize() << " arcs" << endl;
+      << "    " << value.net.esize() << " arcs" << endl
+      << "    " << num_blks << " blocks" << endl
+      << "    " << 100.0*num_blks/value.net.vsize() << " % frag" << endl;
     return s.str();
   }
   string type_info() const { return info(); }

@@ -543,7 +543,7 @@ ExecStatus Info::execute()
   if (index_exp)
     {
       auto listread = new ListRead(name, index_exp);
-      auto r = listread->execute();
+      auto r = listread->execute(); // si es ok ==> index_exp es liberado
       if (not r.first)
 	{
 	  delete listread;
@@ -551,7 +551,6 @@ ExecStatus Info::execute()
 	}
       cout << (*listread->val)->info() << endl;
       delete listread;
-      delete index_exp; 
       return make_pair(true, "");
     }
 
@@ -599,14 +598,14 @@ ExecStatus Rm::execute()
   return make_pair(true, "");
 }
 
-ExecStatus Search::semant_mapa() 
+static pair<ExecStatus, MetaMapa*> semant_mapa(const string & mapa_name)
 {
   stringstream s;
   Varname * mapa = var_tbl(mapa_name);
   if (mapa == nullptr)
     {
       s << "Map var " << mapa_name << " not found";
-      return make_pair(false, s.str());
+      return make_pair(make_pair(false, s.str()), nullptr);
     }
 
   VarMap * ptr = static_cast<VarMap*>(mapa->get_value_ptr());
@@ -614,10 +613,21 @@ ExecStatus Search::semant_mapa()
     {
       s << "Map var"  << mapa_name << " has not a associated value"
 	<< "THIS PROBABLY IS A BUG. PLEASE REPORT IT";
-      return make_pair(false, s.str());
+      return make_pair(make_pair(false, s.str()), nullptr);
     }
 
-  mapa_ptr = &ptr->value;
+  MetaMapa * mapa_ptr = &ptr->value;
+
+  return make_pair(make_pair(true, ""), mapa_ptr);
+}
+
+ExecStatus Search::semant_mapa() 
+{
+  auto p = ::semant_mapa(mapa_name);
+  if (not p.first.first)
+    return p.first;
+
+  mapa_ptr = p.second;
 
   return make_pair(true, "");
 }
@@ -1125,31 +1135,97 @@ ExecStatus SearchNode::execute()
     return make_pair(false, res.second);
 
   stringstream s;
-  if (exp->type != VAR)
+  switch (exp->type)
     {
+    case Exp::STRCONST:
+      {
+	const string & rif = static_cast<StringExp*>(exp)->value;
+	node_ptr = mapa_ptr->search_node(rif);
+	if (node_ptr == nullptr)
+	  {
+	    s << "Rif " << rif << " not found as node (maybe it is in the map)";
+	    return make_pair(false, s.str());
+	  }
+	break;
+      }
+    case Exp::VAR:
+      {
+	Varname * varname = static_cast<Varname*>(exp);
+	Var * value = varname->get_value_ptr();
+	if (value == nullptr)
+	  {
+	    s << "var name " << varname->name << " has not a value" << endl
+	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
+	    return make_pair(false, s.str());
+	  }
+	switch (value->var_type)
+	  {
+	  case Var::VarType::Producer: 
+	    {
+	      VarProducer * var_producer = static_cast<VarProducer*>(value);
+	      node_ptr = mapa_ptr->search_node(var_producer->productor);
+	      if (node_ptr == nullptr)
+		return make_pair(false, "Producer not found");
+	      break;
+	    }
+	  case Var::VarType::String: 
+	    {
+	      VarString * var_str = static_cast<VarString*>(value);
+	      node_ptr = mapa_ptr->search_node(var_str->value);
+	      if (node_ptr == nullptr)
+		return make_pair(false, "Producer not found");
+	      break;
+	    }
+	  default:
+	    s << "Producer operand is not a producer var";
+	    return make_pair(false, s.str());
+	  }
+	break;
+      }
+    default:
       s << "Producer operand is not a producer var";
       return make_pair(false, s.str());
     }
 
-  Varname * varname = static_cast<Varname*>(exp);
-  VarProducer * value = static_cast<VarProducer*>(varname->get_value_ptr());
-  if (value == nullptr)
-    {
-      s << "var name " << varname->name << " has not a value" << endl
-	<< "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
-      return make_pair(false, s.str());
-    }
-
-  if (value->var_type != Var::VarType::Producer)
-    {
-      s << "var name " << varname->name << " is not a producer type";
-      return make_pair(false, s.str());
-    }
-
-  node_ptr = mapa_ptr->search_node(value->productor);
-  if (node_ptr == nullptr)
-    return make_pair(false, "Producer not found");
-
   free();  
+  return make_pair(true, "");
+}
+
+ExecStatus Connected::semant_exp(Exp * exp, Net::Node *& ptr)
+{
+  assert(mapa_ptr);
+  auto r = exp->execute();
+  if (not r.first)
+    return make_pair(false, r.second);
+  
+  stringstream s;
+  switch (exp->type)
+    {
+    case Exp::STRCONST:
+      {
+	const string & rif = static_cast<StringExp*>(exp)->value;
+	auto producer_ptr = mapa_ptr->tabla_productores(rif);
+	if (producer_ptr == nullptr)
+	  {
+	    s << "string constant \"" << rif << " not found as rif";
+	    return make_pair(false, s.str());
+	  }
+	/* ptr  */
+	
+	break;
+      }
+    case Exp::VAR:
+      ;
+    }
+
+  return make_pair(true, "");
+}
+
+ExecStatus Connected::execute()
+{
+  auto p = ::semant_mapa(mapa_name);
+  if (not p.first.first)
+    return p.first;
+
   return make_pair(true, "");
 }

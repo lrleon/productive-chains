@@ -48,6 +48,13 @@ static const char * search =
 
          Busca en el mapa <mapa-var> todos los productos producidos por
          el ente productivo con rif <rif>
+
+     search node <mapa-var> <producer-exp>
+
+         Busca en el mapa <mapa-var> un nodo de red que corresponda al
+         productor <producer-var>. <producer-var> puede ser un rif en una 
+         cadena de caracteres, como constante o como variable, o también podría
+         ser una variable de tipo productor
      )";
 
 static const char * help = 
