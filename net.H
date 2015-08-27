@@ -228,7 +228,13 @@ struct MetaMapa
 
   bool reachable(Node * src, Node * tgt) const
   {
-    return Test_For_Path<Net>()(net, src, tgt);
+    size_t src_idx = binary_search(nodes, src, cmprif);
+    size_t tgt_idx = binary_search(nodes, tgt, cmprif);
+    cout << "src = " << src->get_info()->rif << endl
+	 << "tgt = " << tgt->get_info()->rif << endl
+	 << "src_idx = " << src_idx << endl
+	 << "tgt_idx = " << tgt_idx << endl;
+    return relation.are_connected(src_idx, tgt_idx);
   }
   // {
   //   DynList<Node*> ret;

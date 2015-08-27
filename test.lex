@@ -75,7 +75,7 @@ COD          [cC][oO][dD]
 TYPE         [tT][yY][pP][eE]
 RIF          [rR][iI][fF]
 NODE         [nN][oO][dD][eE]
- /* REACHABLE    [rR][eE][aA][cC][hH][aA][bB][lL][eE] */
+REACHABLE    [rR][eE][aA][cC][hH][aA][bB][lL][eE]
 
 SPACE           [ \f\r\t\v]
 
@@ -111,6 +111,7 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
 ({HELP}|\?)  return HELP;
 {RIF}        return RIF;
 {NODE}       return NODE;
+{REACHABLE}  return REACHABLE;
 
  /*
   * The single-characters tokens 

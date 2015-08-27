@@ -203,7 +203,11 @@ struct Info : public Exp
   Info(char * nom, Exp * exp) : Exp(INFO), name(nom), index_exp(exp) {}
 
   ExecStatus execute();
-  void free() { if (index_exp) delete index_exp; }
+  void free() 
+  {
+    if (index_exp and index_exp->type != VAR)
+      delete index_exp; 
+  }
 };
 
 struct Ls : public Exp
@@ -222,7 +226,7 @@ struct TypeInfo : public Exp
   TypeInfo(const string & n, Exp * exp) 
     : Exp(TYPEINFO), name(n), index_exp(exp) {}
   ExecStatus execute();
-  void free() { if (index_exp) delete index_exp; }
+  void free() { if (index_exp and index_exp->type != VAR) delete index_exp; }
 };
 
 struct Connected : public Exp
@@ -239,7 +243,13 @@ struct Connected : public Exp
   ExecStatus semant_mapa();
   ExecStatus semant_exp(Exp * exp, Net::Node *& ptr);
   ExecStatus execute();
-  void free() { delete src_exp; delete tgt_exp; }
+  void free() 
+  {
+    if (src_exp->type != VAR)
+      delete src_exp; 
+    if (tgt_exp->type != VAR)
+      delete tgt_exp; 
+  }
 };
 
 struct Help : public Exp
@@ -284,6 +294,7 @@ struct VarMap : public Var
 
 struct VarNode : public Var
 {
+  MetaMapa * mapa_ptr = nullptr;
   Net * net_ptr = nullptr;
   Net::Node * node_ptr = nullptr;
 
@@ -371,6 +382,7 @@ struct IntExp : public Exp
 
 struct VarProducer : public Var
 {
+  MetaMapa * mapa_ptr = nullptr;
   Productor productor;
 
   VarProducer() : Var(Producer) {}
@@ -412,7 +424,7 @@ struct ListRead : public Exp, public ListAccess
   ListRead(const string & name, Exp * idx_exp) 
     : Exp(LISTREAD), ListAccess(name, idx_exp) {}
   ExecStatus execute();
-  void free() { delete index_exp; }
+  void free() { if (index_exp->type != VAR) delete index_exp; }
 };
 
 struct ListWrite : public Exp, public ListAccess
@@ -424,8 +436,10 @@ struct ListWrite : public Exp, public ListAccess
   ExecStatus execute();
   void free() 
   {
-    delete index_exp; 
-    delete rexp;
+    if (index_exp->type != VAR) 
+      delete index_exp; 
+    if (rexp->type != VAR)
+      delete rexp;
   }
 };
 
@@ -433,7 +447,7 @@ struct Search : public Exp
 {
   string mapa_name;
   Exp * exp = nullptr;
-  const MetaMapa * mapa_ptr = nullptr;
+  MetaMapa * mapa_ptr = nullptr;
   string str;
   Uid id;
 
@@ -561,7 +575,7 @@ struct Load : public Exp
   Load(Exp * exp) noexcept : Exp(MAP), name_exp(exp) {}
 
   ExecStatus execute();
-  void free() {delete name_exp; }
+  void free() { if (name_exp->type != VAR) delete name_exp; }
 };
 
 struct Assign : public Exp
@@ -571,12 +585,6 @@ struct Assign : public Exp
 
   Assign(string lname, Exp * rhs) 
     : Exp(ASSIGN), left_name(move(lname)), right_side(rhs) {}
-
-  ~Assign()
-  {
-    // if (right_side->type != VAR)
-    //   delete right_side; 
-  }
 
   ExecStatus execute();
   void free() { delete right_side; }

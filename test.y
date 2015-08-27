@@ -30,7 +30,7 @@
 };
 
 %token LOAD SAVE EXIT ERROR INFO LS RM SEARCH PRODUCER PRODUCERS LIST APPEND
-%token PRODUCT ID REGEX HELP COD TYPEINFO RIF NODE
+%token PRODUCT ID REGEX HELP COD TYPEINFO RIF NODE REACHABLE
 %token <symbol> STRCONST INTCONST VARNAME 
 
 %type <expr> exp
@@ -87,6 +87,7 @@ cmd_unit: EXIT
 	  }
         | search_cmd { $$ = $1; }
         | help_exp { $$ = $1; }
+        | REACHABLE VARNAME ref_exp ref_exp { $$ = new Connected($2, $3, $4); }
 ;
 
 help_exp: HELP          { $$ = new Help; }
@@ -228,6 +229,7 @@ rvalue: VARNAME
 	  else
 	    $$ = varname;
 	}
+// TODO: regla para leer listas y de ser posibe que sea recursiva
 ;
 
 %%
@@ -243,7 +245,7 @@ ExecStatus Load::execute()
 
   auto r = name_exp->execute();
   if (not r.first)
-    return make_pair(false, r.second);
+    return r;
 
   string file_name;
   if (name_exp->type == Exp::STRCONST)
@@ -288,10 +290,7 @@ ExecStatus Assign::execute()
 {
   auto result = right_side->execute();
   if (not result.first)
-    {
-      cout << result.second << endl;
-      return make_pair(false, result.second);
-    }
+    return result;
 
   Varname * left_side = var_tbl(left_name);
   if (left_side == nullptr)
@@ -375,8 +374,10 @@ ExecStatus Assign::execute()
 	    left_side->free_value();
 	    goto again_search;
 	  }
-	static_cast<VarProducer*>(var)->productor = 
-	  *static_cast<SearchProducerRif*>(right_side)->producer_ptr;
+	auto prod_var = static_cast<VarProducer*>(var);
+	auto prod_search = static_cast<SearchProducerRif*>(right_side);
+	prod_var->mapa_ptr = prod_search->mapa_ptr;
+	prod_var->productor = *prod_search->producer_ptr;
 	delete right_side;
 	return make_pair(true, "");
       }
@@ -462,8 +463,10 @@ ExecStatus Assign::execute()
 	    goto again_search_node;
 	  }
 	auto search_exp = static_cast<SearchNode*>(right_side);
-	static_cast<VarNode*>(var)->net_ptr = &search_exp->mapa_ptr->net;
-        static_cast<VarNode*>(var)->node_ptr = search_exp->node_ptr;
+	auto varnode = static_cast<VarNode*>(var);
+	varnode->mapa_ptr = search_exp->mapa_ptr;
+	varnode->net_ptr = &search_exp->mapa_ptr->net;
+        varnode->node_ptr = search_exp->node_ptr;
 	delete right_side;
 	return make_pair(true, "");
       }
@@ -547,7 +550,7 @@ ExecStatus Info::execute()
       if (not r.first)
 	{
 	  delete listread;
-	  return make_pair(false, r.second);
+	  return r;
 	}
       cout << (*listread->val)->info() << endl;
       delete listread;
@@ -636,12 +639,12 @@ ExecStatus Search::semant_string()
 {
   auto r = semant_mapa();
   if (not r.first)
-    return make_pair(false, r.second);
+    return r;
   assert(mapa_ptr != nullptr);
 
-  auto res = exp->execute();
-  if (not res.first)
-    return make_pair(false, res.second);
+  r = exp->execute();
+  if (not r.first)
+    return r;
 
   stringstream s;
   switch (exp->type)
@@ -678,7 +681,7 @@ ExecStatus SearchProducerRif::semant()
 {
   auto r = semant_string();
   if (not r.first)
-    return make_pair(false, r.second);
+    return r;
   
   cout << "Searching " << str << endl; 
   producer_ptr = mapa_ptr->tabla_productores(str);
@@ -717,7 +720,7 @@ ExecStatus Append::execute()
       auto rexp = it.get_curr();
       auto r = rexp->execute();
       if (not r.first)
-	return make_pair(false, r.second);      
+	return r;
     }
   
   for (auto it = rexp_list.get_it(); it.has_curr(); it.next())
@@ -790,7 +793,7 @@ ExecStatus ListAccess::access()
 
   auto r = index_exp->execute();
   if (not r.first)
-    return make_pair(false, r.second);
+    return r;
 
   size_t i = 0;
   switch (index_exp->type)
@@ -836,11 +839,11 @@ ExecStatus ListWrite::execute()
 {
   auto r = access();
   if (not r.first)
-    return make_pair(false, r.second);
+    return r;
 
   r = rexp->execute();
   if (not r.first)
-    return make_pair(false, r.second);
+    return r;
 
   assert(val != nullptr);
   delete *val;
@@ -876,7 +879,7 @@ ExecStatus SearchProducerRifCmd::execute()
 {
   auto r = semant();
   if (not r.first)
-    return make_pair(false, r.second);
+    return r;
 
   assert(producer_ptr != nullptr);
 
@@ -889,7 +892,7 @@ ExecStatus SearchProducerRegex::semant()
 {
   auto r = semant_string();
   if (not r.first)
-    return make_pair(false, r.second);
+    return r;
   
   try
     {
@@ -910,7 +913,7 @@ ExecStatus SearchProducerRegexCmd::execute()
 {
  auto r = semant();
  if (not r.first)
-   return make_pair(false, r.second);
+   return r;
  
  if (producers.is_empty())
    {
@@ -930,12 +933,12 @@ ExecStatus Search::semant_int()
 {
   auto r = semant_mapa();
   if (not r.first)
-    return make_pair(false, r.second);
+    return r;
   assert(mapa_ptr != nullptr);
   
   r = exp->execute();
   if (not r.first)
-    return make_pair(false, r.second);
+    return r;
 
   switch (exp->type)
     {
@@ -972,7 +975,7 @@ ExecStatus SearchProductId::semant()
 {
   auto r = semant_int();
   if (not r.first)
-    return make_pair(false, r.second);
+    return r;
 
   assert(mapa_ptr != nullptr);
 
@@ -993,7 +996,7 @@ ExecStatus SearchProductIdCmd::execute()
 {
   auto r = semant();
   if (not r.first)
-    return make_pair(false, r.second);
+    return r;
 
   cout << producto << endl;
 
@@ -1004,7 +1007,7 @@ ExecStatus SearchProductsRegex::semant()
 {
   auto r = semant_string();
   if (not r.first)
-    return make_pair(false, r.second);
+    return r;
 
   try
     {
@@ -1025,7 +1028,7 @@ ExecStatus SearchProductsRegexCmd::execute()
 {
   auto r = semant();
   if (not r.first)
-    return make_pair(false, r.second);
+    return r;
 
   if (productos.is_empty())
     cout << "Empty" << endl;
@@ -1039,7 +1042,7 @@ ExecStatus SearchProductsCod::semant()
 {
   auto r = semant_string();
   if (not r.first)
-    return make_pair(false, r.second);
+    return r;
 
   productos = mapa_ptr->productos_by_cod_aran(str);
   free();
@@ -1050,7 +1053,7 @@ ExecStatus SearchProductsCodCmd::execute()
 {
   auto r = semant();
   if (not r.first)
-    return make_pair(false, r.second);
+    return r;
 
   if (productos.is_empty())
     cout << "Empty" << endl;
@@ -1064,7 +1067,7 @@ ExecStatus SearchProductsRif::semant()
 {
   auto r = semant_string();
   if (not r.first)
-    return make_pair(false, r.second);
+    return r;
 
   productos = mapa_ptr->productos_by_rif(str);
   free();
@@ -1075,7 +1078,7 @@ ExecStatus SearchProductsRifCmd::execute()
 {
    auto r = semant();
   if (not r.first)
-    return make_pair(false, r.second);
+    return r;
 
   if (productos.is_empty())
     cout << "Empty" << endl;
@@ -1094,7 +1097,7 @@ ExecStatus TypeInfo::execute()
       if (not r.first)
 	{
 	  delete listread;
-	  return make_pair(false, r.second);
+	  return r;
 	}
       cout << (*listread->val)->type_info() << endl;
       delete listread;
@@ -1127,12 +1130,12 @@ ExecStatus SearchNode::execute()
 {
   auto r = semant_mapa();
   if (not r.first)
-    return make_pair(false, r.second);
+    return r;
   assert(mapa_ptr != nullptr);
 
-  auto res = exp->execute();
-  if (not res.first)
-    return make_pair(false, res.second);
+  r = exp->execute();
+  if (not r.first)
+    return r;
 
   stringstream s;
   switch (exp->type)
@@ -1196,7 +1199,7 @@ ExecStatus Connected::semant_exp(Exp * exp, Net::Node *& ptr)
   assert(mapa_ptr);
   auto r = exp->execute();
   if (not r.first)
-    return make_pair(false, r.second);
+    return r;
   
   stringstream s;
   switch (exp->type)
@@ -1204,18 +1207,84 @@ ExecStatus Connected::semant_exp(Exp * exp, Net::Node *& ptr)
     case Exp::STRCONST:
       {
 	const string & rif = static_cast<StringExp*>(exp)->value;
-	auto producer_ptr = mapa_ptr->tabla_productores(rif);
-	if (producer_ptr == nullptr)
+	ptr = mapa_ptr->search_node(rif);
+	if (ptr == nullptr)
 	  {
-	    s << "string constant \"" << rif << " not found as rif";
+	    s << "Rif " << rif << " is not associated to a node" << endl
+	      << "which it would not mean that it does not exists as" << endl
+	      << "economical unit associated to this rif";
 	    return make_pair(false, s.str());
 	  }
-	/* ptr  */
-	
 	break;
       }
     case Exp::VAR:
-      ;
+      {
+	auto varname = static_cast<Varname*>(exp);
+	Var * var = varname->get_value_ptr();
+	if (var == nullptr)
+	  {
+	    s << "var name " << varname->name << " has not a value" << endl
+	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
+	    return make_pair(false, s.str());
+	  }
+	switch (var->var_type)
+	  {
+	  case Var::VarType::String:
+	    {
+	      const string & rif = static_cast<VarString*>(var)->value;
+	      ptr = mapa_ptr->search_node(rif);
+	      if (ptr == nullptr)
+		{
+		  s << "Rif " << rif << " is not associated to a node" << endl
+		    << "which it would not mean that it does not exists" << endl
+		    << "as economical unit associated to this rif";
+		  return make_pair(false, s.str());
+		}
+	      break;
+	    }
+	  case Var::VarType::Node: 
+	    {
+	      auto varnode = static_cast<VarNode*>(var);
+	      if (varnode->mapa_ptr != mapa_ptr)
+		{
+		  s << "Var node " << varname->name << " belongs to another map"
+		    << endl;
+		  return make_pair(false, s.str());
+		}
+	      ptr = varnode->node_ptr;
+	      break;
+	    }
+	  case Var::VarType::Producer:
+	    {
+	      auto prod_var = static_cast<VarProducer*>(var);
+	      if (prod_var->mapa_ptr != mapa_ptr)
+		{
+		  s << "Var node " << varname->name << " belongs to another map"
+		    << endl;
+		  return make_pair(false, s.str());
+		}
+	      const string & rif = prod_var->productor.rif;
+	      ptr = mapa_ptr->search_node(rif);
+	      if (ptr == nullptr)
+		{
+		  s << "Rif " << rif << " is not associated to a node" << endl
+		    << "which it would not mean that it does not exists" << endl
+		    << "as economical unit associated to this rif";
+		  return make_pair(false, s.str());
+		}
+	      break;
+	    }
+	  default:
+	    s << "var name " << varname->name << " is not a valid type" << endl
+	      << "Here variables must be of type string, node or producer";
+	    return make_pair(false, s.str());
+	  }
+	break;
+      }
+    default:
+      s << "Invalid expression for node. It must be a node" << endl
+	<< "producer var or a string var or constant containing a rif";
+      return make_pair(false, s.str());
     }
 
   return make_pair(true, "");
@@ -1226,6 +1295,25 @@ ExecStatus Connected::execute()
   auto p = ::semant_mapa(mapa_name);
   if (not p.first.first)
     return p.first;
+  
+  mapa_ptr = p.second;
 
+  auto r = semant_exp(src_exp, src);
+  if (not r.first)
+    return r;
+
+  r = semant_exp(tgt_exp, tgt);
+  if (not r.first)
+    return r;
+
+  if (mapa_ptr->reachable(src, tgt))
+    cout << "Nodes are reachable" << endl;
+  else
+    cout << "Nodes are not reachable" << endl;
+
+  if (src_exp->type != VAR)
+    delete src_exp;
+  if (tgt_exp->type != VAR)
+    delete tgt_exp;
   return make_pair(true, "");
 }
