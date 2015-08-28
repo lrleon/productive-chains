@@ -41,8 +41,8 @@ struct Exp : public ASTNode
   enum Type { MAP, LIST, STRCONST, INTCONST, VAR, ASSIGN, INFO, LS, RM, 
 	      SEARCHPRODUCER, APPEND, LISTREAD, LISTWRITE, SEARCHPRODUCERREGEX,
 	      SEARCHPRODUCTID, SEARCHPRODUCTREGEX, SEARCHPRODUCTCOD,
-	      SEARCHPRODUCTRIF, SEARCHNODE, NODE, NET, CONNECTED,
-	      TYPEINFO, HELP, ERROR } type;
+	      SEARCHPRODUCTRIF, SEARCHNODE, NODE, COVER, REACHABLE,
+	      TYPEINFO, HELP, DOT, BLOCKS, ERROR } type;
 
   string type_string() const
   {
@@ -69,15 +69,16 @@ struct Exp : public ASTNode
       case LISTREAD: return "LISTREAD";
       case LISTWRITE: return "LISTWRITE";
       case NODE: return "NODE";
-      case NET: return "NET";
-      case CONNECTED: return "CONNECTED";
+      case COVER: return "COVER";
+      case REACHABLE: return "REACHABLE";
+      case DOT: return "DOT";
+      case BLOCKS: return "BLOCKS";
       default: ERROR("Tipo de expresion invalido");
       }
     return string("INVALID");
   }
 
   Exp(Type t) : type(t) { }
-
   ExecStatus execute() 
   { 
     ERROR("Epx: execute method called"); return ExecStatus(); 
@@ -88,10 +89,21 @@ struct Exp : public ASTNode
 struct ErrorExp : Exp
 {
   string msg;
-
   ErrorExp(const string & m) : Exp(ERROR), msg(m) {}
   ExecStatus execute() { return make_pair(false, msg); }
   void free() {}
+};
+
+struct Dot : public Exp
+{
+  const string net_name;
+  Exp * file_exp = nullptr;
+  Net * net_ptr  = nullptr;
+  string file_name;
+  Dot(const string & name, Exp * str_exp) 
+    : Exp(DOT), net_name(name), file_exp(str_exp) {}
+  ExecStatus execute();
+  void free() { if (file_exp->type != Exp::Type::VAR) delete file_exp; }
 };
 
 struct StringExp : public Exp
@@ -122,7 +134,7 @@ struct Append : public Exp
 struct Var
 {
   enum VarType { Map, List, String, Int, Producer, Product, Node, 
-		 Subnet} var_type;
+		 Cover} var_type;
 
   Var(VarType type) : var_type(type) {}
 
@@ -144,7 +156,7 @@ struct Var
       case Producer: return string("Producer");
       case Product: return string("Product");
       case Node: return string("Node");
-      case Subnet: return string("Subnet");
+      case Cover: return string("Cover");
       default: ERROR("Invalid type %ld", var_type);
       }
     return string("Var::type_string() var_type invalid");
@@ -238,7 +250,7 @@ struct Connected : public Exp
   Net::Node * src = nullptr;
   Net::Node * tgt = nullptr;
   Connected(const string & name, Exp * src, Exp * tgt) 
-    : Exp(CONNECTED), mapa_name(name), src_exp(src), tgt_exp(tgt) {}
+    : Exp(REACHABLE), mapa_name(name), src_exp(src), tgt_exp(tgt) {}
       // Valida que exp sea rif, producer o nodo y pone el el nodo en ptr
   ExecStatus semant_mapa();
   ExecStatus semant_exp(Exp * exp, Net::Node *& ptr);
@@ -250,6 +262,19 @@ struct Connected : public Exp
     if (tgt_exp->type != VAR)
       delete tgt_exp; 
   }
+};
+
+struct Cover : public Exp
+{
+  const string mapa_name;
+  const string node_name;
+  MetaMapa * mapa_ptr = nullptr;
+  Net::Node * src = nullptr;
+  Net net;
+  Cover(const string & mapa, const string & node) 
+    : Exp(COVER), mapa_name(mapa), node_name(node) {}
+  ExecStatus execute();
+  void free() {}
 };
 
 struct Help : public Exp
@@ -272,6 +297,7 @@ struct Rm : public Exp
 struct VarMap : public Var
 {
   MetaMapa value;
+  DynList<Net*> net_list; // redes dependientes de este mapa
   VarMap() : Var(Map) {}
 
   VarMap * clone() const { return new VarMap(); }
@@ -290,6 +316,35 @@ struct VarMap : public Var
     return s.str();
   }
   string type_info() const { return info(); }
+};
+
+struct VarCover : public Var
+{
+  MetaMapa * mapa_ptr = nullptr;
+  Net        net;
+  VarCover() : Var(Cover) {}
+  VarCover * clone() const { return new VarCover; }
+  void copy(Var * src) 
+  {
+    auto s = static_cast<VarCover*>(src);
+    mapa_ptr = s->mapa_ptr;
+    net      = s->net;
+  }
+  string info() const
+  {
+    stringstream s;
+    s << "Cover var:" << endl;
+    net.for_each_node([&s] (auto p) { s << "    " << *p->get_info() << endl; });
+    return s.str();
+  }
+  string type_info() const 
+  {
+    stringstream s;
+    s << "Cover var:" << endl
+      << "    " << net.vsize() << " nodes" << endl
+      << "    " << net.esize() << " arcs" << endl;
+    return s.str();
+  }
 };
 
 struct VarNode : public Var

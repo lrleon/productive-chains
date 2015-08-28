@@ -76,6 +76,8 @@ TYPE         [tT][yY][pP][eE]
 RIF          [rR][iI][fF]
 NODE         [nN][oO][dD][eE]
 REACHABLE    [rR][eE][aA][cC][hH][aA][bB][lL][eE]
+COVER        [cC][oO][vV][eE][rR]
+DOT          [dD][oO][tT]
 
 SPACE           [ \f\r\t\v]
 
@@ -112,6 +114,8 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
 {RIF}        return RIF;
 {NODE}       return NODE;
 {REACHABLE}  return REACHABLE;
+{COVER}      return COVER;
+{DOT}        return DOT;
 
  /*
   * The single-characters tokens 

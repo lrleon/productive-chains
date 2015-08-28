@@ -3,6 +3,7 @@
 # define NET_H
 
 # include <regex>
+# include <iomanip>
 # include <tpl_union.H>
 # include <tpl_test_path.H>
 # include <grafo.H>
@@ -74,6 +75,7 @@ struct MetaMapa
 {
   mutable TablaProductores     tabla_productores;
   mutable TablaMetaProductos   tabla_productos;
+  mutable TablaMetaInsumos     tabla_insumos;
   mutable TablaMetaSocios      tabla_socios;
   mutable Net                  net;
   mutable DynArray<Net::Node*> nodes;
@@ -121,7 +123,8 @@ struct MetaMapa
   MetaMapa() {}
 
   MetaMapa(ifstream & in) 
-    : tabla_productores(in), tabla_productos(in), tabla_socios(in)
+    : tabla_productores(in), tabla_productos(in), 
+      tabla_insumos(in), tabla_socios(in)
   {
     if (::verbose) 
       cout << "Loading Net ... " << endl;
@@ -247,5 +250,43 @@ struct MetaMapa
   // DynList<Node*> nodos_insumo
 };
 
+
+struct Write_Node
+{
+  static const size_t N = 15;
+
+  void operator () (const Net&, Net::Node * p, ostream & out) const
+  {
+    auto prod_ptr = p->get_info();
+    string nom = prod_ptr->nombre;
+    nom.erase(std::remove(nom.begin(), nom.end(), '"'), nom.end());
+    if (nom.size() > 15)
+      nom.erase(N, std::string::npos);
+    out << "label = \"" << prod_ptr->rif << "\\n" 
+	<< nom << "\"";
+  }
+};
+
+struct Write_Arc
+{
+  TablaMetaInsumos * tabla_insumos_ptr = nullptr;
+
+  Write_Arc(const TablaMetaInsumos & tabla_insumos)
+    : tabla_insumos_ptr(const_cast<TablaMetaInsumos*>(&tabla_insumos)) {}
+
+  void operator () (const Net&, Net::Arc * a, ostream & out) const
+  {
+    const auto & info = a->get_info();
+    auto prod_ptr = (*tabla_insumos_ptr)(info.insumo_id);
+    string nom = prod_ptr->nombre;
+    nom.erase(std::remove(nom.begin(), nom.end(), '"'), nom.end());
+    out << "label = \"" << prod_ptr->nombre << " (" 
+	<< info.arco_id << " " << info.insumo_id << ")" 
+	// << "\\n"
+	// << std::setprecision(8) 
+	// << info.cod_aran << " " << info.cantidad << " " << info.coste 
+	<< "\"";
+  }
+};
 
 # endif 

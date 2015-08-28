@@ -33,9 +33,14 @@ void process_comand_line(int argc, char *argv[])
   cmd.add(pname);
 
   ValueArg<string>
-    sname("A", "archivo-socios", "nombre archivos accionistas", false,
+    sname("A", "archivo-socios", "nombre archivo accionistas", false,
 	  "socios.txt", "nombre de archivo donde se escirben los socios");
   cmd.add(sname);
+
+  ValueArg<string> 
+    iname("i", "archivo-input", "nombre archivo insumos", false,
+	  "insumos.txt", "nombre de archivo de insumos");
+  cmd.add(iname);
 
        /****************** Archivos de entrada ****************/
   ValueArg<string>   // nom_unidades
@@ -132,6 +137,13 @@ void process_comand_line(int argc, char *argv[])
   if (socios_out.fail())
     throw domain_error(fmt("No puedo crear %s", sname.getValue().c_str()));
   mapa.tabla_socios.save(socios_out);
+
+  ofstream insumos_out(iname.getValue());
+  if (insumos_out.fail())
+    throw domain_error(fmt("No puedo crear %s", iname.getValue().c_str()));
+  TablaMetaInsumos tabla_insumos(mapa.tabla_insumos);
+  tabla_insumos.save(insumos_out);
+
 }
 
 

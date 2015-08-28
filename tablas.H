@@ -936,6 +936,90 @@ struct TablaMetaProductos : public DynArray<MetaProducto>
   } 
 };
 
+struct MetaInsumo 
+{
+  Uid id; // campo insumo_id
+  string nombre; 
+
+  MetaInsumo() {}
+  MetaInsumo(Uid i, const string & nom) : id(i), nombre(nom) {}
+
+  void save(ostream & out) const
+  {
+    out << id << endl
+	<< nombre << endl;
+  }
+
+  void load(istream & in)
+  {
+    in >> id;
+    in.ignore();
+    getline(in, nombre);
+  }
+};
+
+struct TablaMetaInsumos : public DynArray<MetaInsumo>
+{
+  typedef bool (*CmpId)(const MetaInsumo &, const MetaInsumo &);
+
+  CmpId cmp_id = [] (const MetaInsumo & p1, const MetaInsumo & p2)
+  { return p1.id < p2.id; };
+
+  DynArray<MetaInsumo*> index;
+
+  TablaMetaInsumos() {}
+
+  TablaMetaInsumos(const TablaInsumos & tabla_insumos)
+  {
+    if (::verbose)
+      cout << "Building MetaInsumos table" << endl;
+    size_t n = tabla_insumos.size();
+    size_t i = 0;
+    reserve(n);
+    tabla_insumos.for_each([this, &i] (auto & p)
+      {
+	access(i++) = MetaInsumo(p.id, p.nombre);
+      });
+
+    if (::verbose)
+      cout << "Done!" << endl
+	   << "    Sorting" << endl;
+    in_place_sort(*this, cmp_id);
+
+    if (::verbose)
+      cout << "    done!" << endl;
+  }
+
+  MetaInsumo * operator () (Uid id) const noexcept
+  {
+    MetaInsumo p; p.id = id;
+    return bsearch(*this, p, cmp_id);
+  }
+
+  void save(ostream & out) const
+  {
+    if (::verbose)
+      cout << "Saving Inputs" << endl;
+    out << size() << endl;
+    for_each([&out] (const auto & p) { p.save(out); });
+    if (::verbose)
+      cout << "done!" << endl;
+  }
+
+  TablaMetaInsumos(istream & in)
+  {
+    if (::verbose)
+      cout << "Loading MetaInsumos" << endl;
+    size_t n;
+    in >> n;
+    reserve(n);
+    for (auto i = 0; i < n; ++i)
+      access(i).load(in);
+    if (::verbose)
+      cout << "end" << endl
+  	   << endl;
+  }
+};
 
 /*
  * Orden de construcción debe ser *estrictamente* así

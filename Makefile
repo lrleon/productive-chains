@@ -75,8 +75,8 @@ transform-data-op: transform-data.C tablas.H grafo.H
 transform-data-2: transform-data-2.C tablas.H grafo.H net.H grafo.o net.o
 	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ grafo.o net.o $(LIBS)
 
-transform-data-2-op: transform-data-2.C tablas.H grafo.H net.H
-	$(CXX) $(OPT) $(INCLUDE) transform-data-2.C -o $@ $(LIBS)
+transform-data-2-op: transform-data-2.C tablas.H grafo.H net.H grafo.o net.o
+	$(CXX) $(OPT) $(INCLUDE) transform-data-2.C -o $@ grafo.o net.o $(LIBS)
 
 test-load-grafo: test-load-grafo.C tablas.H grafo.H net.H
 	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ $(LIBS)

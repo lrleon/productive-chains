@@ -35,9 +35,13 @@ void process_comand_line(int argc, char *argv[])
 			  "socios.txt",  "nombre archivo socios");
   cmd.add(socios);
 
-  ValueArg<string> grafo("g", "archivo-grafo", "nombre archivo grafo", true,
+  ValueArg<string> grafo("g", "archivo-grafo", "nombre archivo grafo", false,
 			 "grafo.txt", "nombre archivo grafo");
   cmd.add(grafo);
+
+  ValueArg<string> insumos("i", "archivo-insumos", "nombre archivo insumos",
+			   false, "insumos.txt", "nombre archivo insumos");
+  cmd.add(insumos);
 
   cmd.parse(argc, argv);
   ::verbose = verbose.getValue();
@@ -54,25 +58,27 @@ void process_comand_line(int argc, char *argv[])
     throw domain_error(fmt("No puedo abrir %s", 
 			   productores.getValue().c_str()));
   TablaProductores tabla_productores(productores_stream);
-
   tabla_productores.save(out);
 
   ifstream productos_stream(productos.getValue());
   if (productos_stream.fail())
     throw domain_error(fmt("No puedo abrir %s", productos.getValue().c_str()));
   TablaMetaProductos tabla_productos(productos_stream);
-
   tabla_productos.save(out);
+
+  ifstream insumos_stream(insumos.getValue());
+  if (insumos_stream.fail())
+    throw domain_error(fmt("No puedo abrir %s", insumos.getValue().c_str()));
+  TablaMetaInsumos tabla_insumos(insumos_stream);
+  tabla_insumos.save(out);
 
   ifstream socios_stream(socios.getValue());
   if (socios_stream.fail())
     throw domain_error(fmt("No puedo abrir %s", socios.getValue().c_str()));
   TablaMetaSocios tabla_socios(socios_stream);
-
   tabla_socios.save(out);
 
   Net net = build_net(g, tabla_productores);
-
   save_net(net, tabla_productores, out);
 }
 

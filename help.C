@@ -97,6 +97,12 @@ R"(Informacion sobre una variable y su contenido
          de la variable
    )";
 
+static const char * reachable =
+R"(Determina si dos nodos están relacionados
+   
+       reachable <mapa-var> <nodo-var-1> <nodo-var-2>
+   )";
+
 ExecStatus Help::execute()
 {
   cout << endl;
@@ -110,6 +116,7 @@ ExecStatus Help::execute()
     case SEARCHPRODUCTREGEX: cout << ::search; break;    
     case TYPEINFO: cout << typeinfo << endl; break;
     case INFO: cout << info << endl; break;
+    case REACHABLE: cout << reachable << endl; break;
     default: cout << "No help topic" << endl; break;
     }
   return make_pair(true, "");

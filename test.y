@@ -3,6 +3,8 @@
 # define YYDEBUG 0
 
 # include <iostream>  
+# include <tpl_components.H>
+# include <generate_graph.H>
 # include <net-tree.H>
 # include <net-symtbl.H>
 
@@ -30,7 +32,7 @@
 };
 
 %token LOAD SAVE EXIT ERROR INFO LS RM SEARCH PRODUCER PRODUCERS LIST APPEND
-%token PRODUCT ID REGEX HELP COD TYPEINFO RIF NODE REACHABLE
+%token PRODUCT ID REGEX HELP COD TYPEINFO RIF NODE REACHABLE COVER DOT
 %token <symbol> STRCONST INTCONST VARNAME 
 
 %type <expr> exp
@@ -81,13 +83,11 @@ cmd_unit: EXIT
         | SAVE ref_exp ref_exp             { }
         | LS                               { $$ = new Ls(); }
         | RM rm_list                       { $$ = $2; }
-        | APPEND VARNAME item_list         
-	  {
-	    $$ = new Append($2, $3); delete $3;
-	  }
+        | APPEND VARNAME item_list { $$ = new Append($2, $3); delete $3; }
         | search_cmd { $$ = $1; }
         | help_exp { $$ = $1; }
         | REACHABLE VARNAME ref_exp ref_exp { $$ = new Connected($2, $3, $4); }
+        | DOT VARNAME ref_exp { $$ = new Dot($2, $3); }
 ;
 
 help_exp: HELP          { $$ = new Help; }
@@ -194,6 +194,10 @@ exp : LOAD ref_exp
     | SEARCH NODE VARNAME ref_exp
       {
 	$$ = new SearchNode($3, $4);
+      }
+    | COVER VARNAME VARNAME
+      {
+	$$ = new Cover($2, $3);
       }
 ;
 
@@ -470,6 +474,28 @@ ExecStatus Assign::execute()
 	delete right_side;
 	return make_pair(true, "");
       }
+    case Exp::Type::COVER:
+      {
+	again_cover:
+	auto var = left_side->get_value_ptr();
+	if (var == nullptr)
+	  {
+	    var = new VarCover;
+	    left_side->set_value_ptr(var);
+	  }
+	else
+	  {
+	    left_side->free_value();
+	    goto again_cover;
+	  }
+	auto cover_exp = static_cast<Cover*>(right_side);
+	auto varcover = static_cast<VarCover*>(var);
+	varcover->mapa_ptr = cover_exp->mapa_ptr;
+	varcover->net = move(cover_exp->net);
+	delete right_side;
+	return make_pair(true, "");
+	break;
+      }
     case Exp::Type::VAR:
       {
 	auto rvalue = static_cast<Varname*>(right_side)->get_value_ptr();
@@ -635,6 +661,44 @@ ExecStatus Search::semant_mapa()
   return make_pair(true, "");
 }
 
+static pair<ExecStatus, string> semant_string(Exp * str_exp)
+{
+  auto r = str_exp->execute();
+  if (not r.first)
+    return make_pair(r, "");
+
+  stringstream s;
+  string str;
+  switch (str_exp->type)
+    {
+    case Exp::STRCONST: 
+      str = static_cast<StringExp*>(str_exp)->value;
+      break;
+    case Exp::VAR:
+      {
+	Varname * varname = static_cast<Varname*>(str_exp);
+	VarString * value = static_cast<VarString*>(varname->get_value_ptr());
+	if (value == nullptr)
+	  {
+	    s << "var name " << varname->name << " has not a value" << endl
+	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
+	    return make_pair(make_pair(false, s.str()), "");
+	  }      
+	if (value->var_type != Var::VarType::String)
+	  {
+	    s << "var name " << varname->name 
+	      << " does not correspond to an string";
+	    return make_pair(make_pair(false, s.str()), "");
+	  }
+	str = value->value;
+	break;
+      }
+    default:
+      return make_pair(make_pair(false, "expression is not a string"), "");
+    }
+  return make_pair(make_pair(true, ""), str);
+}
+
 ExecStatus Search::semant_string() 
 {
   auto r = semant_mapa();
@@ -642,38 +706,12 @@ ExecStatus Search::semant_string()
     return r;
   assert(mapa_ptr != nullptr);
 
-  r = exp->execute();
-  if (not r.first)
-    return r;
+  auto res = ::semant_string(exp);
+  if (not res.first.first)
+    return res.first;
 
-  stringstream s;
-  switch (exp->type)
-    {
-    case STRCONST: 
-      str = static_cast<StringExp*>(exp)->value;
-      break;
-    case VAR:
-      {
-	Varname * varname = static_cast<Varname*>(exp);
-	VarString * value = static_cast<VarString*>(varname->get_value_ptr());
-	if (value == nullptr)
-	  {
-	    s << "var name " << varname->name << " has not a value" << endl
-	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
-	    return make_pair(false, s.str());
-	  }      
-	if (value->var_type != Var::VarType::String)
-	  {
-	    s << "var name " << varname->name 
-	      << " does not correspond to an string";
-	    return make_pair(false, s.str());
-	  }
-	str = value->value;
-	break;
-      }
-    default:
-      return make_pair(false, "id in search producer id is not an integer");
-    }
+  str = res.second;
+
   return make_pair(true, "");
 }
 
@@ -1315,5 +1353,75 @@ ExecStatus Connected::execute()
     delete src_exp;
   if (tgt_exp->type != VAR)
     delete tgt_exp;
+  return make_pair(true, "");
+}
+
+ExecStatus Cover::execute()
+{
+  auto p = ::semant_mapa(mapa_name);
+  if (not p.first.first)
+    return p.first;
+  
+  mapa_ptr = p.second;
+  
+  stringstream s;
+  auto varname = var_tbl(node_name);
+  if (varname == nullptr)
+    {
+      s << "Var node: " << node_name << " not found";
+      return make_pair(false, s.str());
+    }
+  auto var = static_cast<VarNode*>(varname->get_value_ptr());
+  if (var->var_type != Var::VarType::Node)
+    {
+      s << "Var node: " << varname->name << " is not a node";
+      return make_pair(false, s.str());
+    }
+
+  src = var->node_ptr;
+  cout << "Building cover graph from " << *src->get_info() << endl;
+  net = Build_Subgraph<Net>()(mapa_ptr->net, src);
+
+  return make_pair(true, "");
+}
+
+ExecStatus Dot::execute()
+{
+  stringstream s;
+  auto varname = var_tbl(net_name);
+  if (varname == nullptr)
+    {
+      s << "Var net " << net_name << " not found";
+      return make_pair(false, s.str());
+    }
+
+  auto varcover = static_cast<VarCover*>(varname->get_value_ptr());
+  if (varcover->var_type != Var::VarType::Cover)
+    {
+      s << "Var " << net_name << " is not a net type";
+      return make_pair(false, s.str());
+    }
+
+  net_ptr = &varcover->net;
+
+  auto res = ::semant_string(file_exp);
+  if (not res.first.first)
+    return res.first;
+
+  file_name = res.second;
+
+  ofstream out(file_name);
+  if (out.fail())
+    {
+      s << "cannot create file " << file_name;
+      return make_pair(false, s.str());
+    }
+
+  Write_Arc warc(varcover->mapa_ptr->tabla_insumos);
+
+  To_Graphviz<Net, Write_Node, Write_Arc>().digraph(*net_ptr, out, 
+						    Write_Node(), warc);
+
+  free();
   return make_pair(true, "");
 }
