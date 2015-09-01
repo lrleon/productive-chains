@@ -252,7 +252,7 @@ public:
 	s << "Insumo id " << insumo_id << " no tiene proveedores declarados "
 	  " para el año " << anho;
 	log.append(s.str());
-	return make_pair(DynList<SemiArco>(), "");
+	return make_pair(DynList<SemiArco>(), insumo_ptr->cod_aran);
       } 
 
     // recorre los proveedores de insumo y los separa en nacionales y extranj
@@ -354,9 +354,9 @@ public:
 
 	Uid arc_id = atol(row(0).c_str());
 	double cantidad = atof(row(4).c_str());
-	string cod_aran = get<1>(lt);
+	const string & cod_aran = get<1>(lt);
 
-	producto_ptr->comb.insert(insumo_id, cantidad);
+	producto_ptr->comb.insert(make_tuple(insumo_id, cod_aran, cantidad));
 
 	for (auto it = get<0>(lt).get_it(); it.has_curr(); it.next())
 	  {

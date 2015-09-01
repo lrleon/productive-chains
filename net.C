@@ -39,7 +39,7 @@ void save_net(const Net & net, const TablaProductores & tabla_productores,
 	      ostream & out)
 {
   if (::verbose) 
-    cout << "Building Net ... " << endl;
+    cout << "Saving Net ... " << endl;
   SaveNetNode s(tabla_productores);
   IO_Graph<Net, LoadNetNode, SaveNetNode> io(const_cast<Net&>(net));
   io.set_store_node(s);

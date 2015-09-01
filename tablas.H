@@ -336,7 +336,8 @@ struct Producto
   // y la cantidad requerida para fabricar una unidad del
   // producto. Sirve como huella dactilar de un producto pero también
   // para filtrar arcos en un grafo
-  DynMapTree<Uid, double> comb;
+  using Term = tuple<Uid, string, double>;
+  DynList<Term> comb;
 
   Producto(Uid i = -1) : id(i) {}
 
@@ -657,8 +658,8 @@ struct Productor
   bool nacional;
   string rif;
   string nombre;
-  //                    cod_aran
-  DynSetTree<tuple<Uid, string>> productos; // productos que fabrica y/o vende
+  //    insumo_id, cod_aran
+  DynMapTree<Uid, string> productos; // productos que fabrica y/o vende
 
       // Lista de socios accionistas. Cada par es rif accionista y %
   DynList<pair<string, float>> socios; 
@@ -732,7 +733,7 @@ struct Productor
 	Uid id;
 	string cod_aran;
 	in >> id >> cod_aran;
-	productos.append(make_tuple(id, cod_aran));
+	productos.insert(id, cod_aran);
       }
     in >> n;                // leer socios
     for (auto i = 0; i < n; ++i)
@@ -752,14 +753,14 @@ struct Productor
   }
 };
 
-
 struct MetaProducto
 {
+  using Factor = tuple<Uid, string, double>;
   Uid id;
   string cod_aran;
   string nombre;
   DynSetTree<string> productores; // lista de rif de productores 
-  DynMapTree<Uid, double> comb;   // lista uid insumo, cantidad
+  DynList<Factor> comb;   // lista uid insumo, cantidad
 
   string to_string() const
   {
@@ -768,9 +769,9 @@ struct MetaProducto
       << productores.size() << " :";
     productores.for_each([&s] (auto p) { s << BLANK << p; });
     s << endl
-      << comb.size() << " :";
+      << comb.size() << " : ";
     comb.for_each([&s] (auto c) 
-		  { s << BLANK << c.first << "," << c.second; });
+      { s << "("<< get<0>(c) << "," << get<1>(c) << "," << get<2>(c) << ")"; });
     return s.str();
   }
 
@@ -781,7 +782,7 @@ struct MetaProducto
 
   MetaProducto() {}
   MetaProducto(Uid i, const string & cod, const string & nom, 
-	       const DynMapTree<Uid, double> & c)
+	       const DynList<Factor> & c)
     : id(i), cod_aran(cod), nombre(nom), comb(c) {}
 
   void save(ostream & out) const
@@ -792,8 +793,10 @@ struct MetaProducto
     productores.for_each([&out] (auto s) { out << BLANK << s; }); 
     out << endl
 	<< comb.size();
-    comb.for_each([&out] (auto p)
-		  { out << BLANK << p.first << BLANK << p.second; });
+    comb.for_each([&out] (auto c)
+    { 
+      out << " " << get<0>(c) << " " << get<1>(c) << " " << get<2>(c); 
+    });
     out << endl;
   }
 
@@ -810,13 +813,18 @@ struct MetaProducto
 	in >> rif;
 	productores.append(rif);
       }
-    in >> n;                // leer fromula insumos
+    in.ignore();
+    string line;
+    getline(in, line);
+    stringstream s(line);
+    s >> n;                // leer fromula insumos
     for (auto i = 0; i < n; ++i)
       {
 	Uid id;
+	string cod;
 	double factor;
-	in >> id >> factor;
-	comb.insert(id, factor);
+	s >> id >> cod >> factor;
+	comb.append(make_tuple(id, cod, factor));
       }
   }
 };
@@ -946,7 +954,7 @@ struct MetaInsumo
 
   void save(ostream & out) const
   {
-    out << id << endl
+    out << id << " " << endl
 	<< nombre << endl;
   }
 

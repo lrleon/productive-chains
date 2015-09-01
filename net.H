@@ -239,6 +239,88 @@ struct MetaMapa
 	 << "tgt_idx = " << tgt_idx << endl;
     return relation.are_connected(src_idx, tgt_idx);
   }
+
+private:
+
+  /* 
+     Retorna los productos producidos por productor_ptr que tienen
+     codigo arancelario cod_aran
+   */
+  DynList<MetaProducto*> inter_productor_cod_aran(Productor * productor_ptr,
+						  const string & cod_aran) const
+  {
+    DynSetTree<string> productos_productor;
+    productor_ptr->productos.for_each([&productos_productor] (auto p)
+      {
+	productos_productor.append(p.second);
+      });
+
+        // todos los productos con cod_aran
+    DynList<MetaProducto*> ret;
+    tabla_productos(cod_aran).for_each([&ret, &productos_productor] (auto ptr)
+      {
+	if (productos_productor.has(ptr->cod_aran))
+	  ret.append(ptr);
+      });
+
+    return ret;
+  }
+
+  /* 
+     Retorna el primer producto encontrado cuya combinación linea quepa
+     enteramente en el conjunto de arcos de entrada de tgt 
+  */
+  MetaProducto * first_match(Node * tgt, 
+			     const DynList<MetaProducto*> & productos) 
+  {
+    // Códigos arancelarios de todos los arcos entrantes a tgt
+    DynSetHash<string> arc_codes;
+    for (auto it = net.get_in_it(tgt); it.has_curr(); it.next())
+      arc_codes.append(it.get_curr()->get_info().cod_aran);
+
+    for (auto it = productos.get_it(); it.has_curr(); it.next())
+      {
+	auto producto_ptr = it.get_curr();
+	if (producto_ptr->comb.all([&arc_codes] (auto p)
+				   { 
+				     return arc_codes.has(get<1>(p));
+				   }))
+	  return producto_ptr;
+      }
+    return nullptr;
+  }
+
+  void upstream(Node * stgt,                     // Nodo de partida
+		MetaProducto * tgt_producto_ptr, // productor de cod_aran
+		Net & net_up,                    // red aguas arriba resultado
+		Node * ttgt) const               // imagen de stgt en net_up
+  {
+    assert(stgt->get_info() == ttgt->get_info());
+    const auto & tgt_productor = *stgt->get_info();
+
+    assert(tgt_productor.productos.exists([tgt_producto_ptr] (auto p)
+           { return p.second  == tgt_producto_ptr->cod_aran; }));
+
+    // Recorrer los arcos de src y visitar aquellos relacionados a inputs
+    const auto & inputs = tgt_producto_ptr->comb; // Insumos de prod
+    for (auto it = net.get_in_it(stgt); it. has_curr(); it.next())
+      {
+	auto a = it.get_curr();
+	if (not inputs.exists([id = a->get_info().insumo_id] (auto c)
+			      { return id == get<0>(c); }))
+	  continue;
+	
+	auto ssrc = net.get_src_node(a);
+	auto tsrc = net_up.insert_node(ssrc->get_info());
+	auto ta = net_up.insert_arc(tsrc, ttgt, a->get_info());
+
+	// upstream(ssrc, 
+      }
+
+  }
+
+public:
+
   // {
   //   DynList<Node*> ret;
 
@@ -280,11 +362,11 @@ struct Write_Arc
     auto prod_ptr = (*tabla_insumos_ptr)(info.insumo_id);
     string nom = prod_ptr->nombre;
     nom.erase(std::remove(nom.begin(), nom.end(), '"'), nom.end());
-    out << "label = \"" << prod_ptr->nombre << " (" 
+    out << "label = \"" << nom << " (" 
 	<< info.arco_id << " " << info.insumo_id << ")" 
-	// << "\\n"
-	// << std::setprecision(8) 
-	// << info.cod_aran << " " << info.cantidad << " " << info.coste 
+	<< "\\n"
+	<< std::setprecision(8) 
+	<< info.cod_aran << " " << info.cantidad << " " << info.coste 
 	<< "\"";
   }
 };
