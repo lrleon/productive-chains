@@ -78,6 +78,7 @@ NODE         [nN][oO][dD][eE]
 REACHABLE    [rR][eE][aA][cC][hH][aA][bB][lL][eE]
 COVER        [cC][oO][vV][eE][rR]
 DOT          [dD][oO][tT]
+UPSTREAM     [uU][pP][sS][tT][rR][eE][aA][mM]
 
 SPACE           [ \f\r\t\v]
 
@@ -116,6 +117,7 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
 {REACHABLE}  return REACHABLE;
 {COVER}      return COVER;
 {DOT}        return DOT;
+{UPSTREAM}   return UPSTREAM;
 
  /*
   * The single-characters tokens 

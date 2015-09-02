@@ -103,6 +103,12 @@ R"(Determina si dos nodos están relacionados
        reachable <mapa-var> <nodo-var-1> <nodo-var-2>
    )";
 
+static const char * cover =
+R"(Calcula el grafo total de crubrimiento a partir de un nodo
+   
+       cover <mapa-var> <nodo-var>
+   )";
+
 ExecStatus Help::execute()
 {
   cout << endl;
@@ -117,6 +123,7 @@ ExecStatus Help::execute()
     case TYPEINFO: cout << typeinfo << endl; break;
     case INFO: cout << info << endl; break;
     case REACHABLE: cout << reachable << endl; break;
+    case COVER: cout << cover << endl; break;
     default: cout << "No help topic" << endl; break;
     }
   return make_pair(true, "");

@@ -1,3 +1,4 @@
+// TODO sustituir VarCover por VarNet
 
 # ifndef NET_TREE_H
 # define NET_TREE_H
@@ -42,6 +43,7 @@ struct Exp : public ASTNode
 	      SEARCHPRODUCER, APPEND, LISTREAD, LISTWRITE, SEARCHPRODUCERREGEX,
 	      SEARCHPRODUCTID, SEARCHPRODUCTREGEX, SEARCHPRODUCTCOD,
 	      SEARCHPRODUCTRIF, SEARCHNODE, NODE, COVER, REACHABLE,
+	      UPSTREAM,
 	      TYPEINFO, HELP, DOT, BLOCKS, ERROR } type;
 
   string type_string() const
@@ -73,6 +75,7 @@ struct Exp : public ASTNode
       case REACHABLE: return "REACHABLE";
       case DOT: return "DOT";
       case BLOCKS: return "BLOCKS";
+      case UPSTREAM: return "UPSTREAM";
       default: ERROR("Tipo de expresion invalido");
       }
     return string("INVALID");
@@ -264,17 +267,35 @@ struct Connected : public Exp
   }
 };
 
-struct Cover : public Exp
+struct SubNet : public Exp
 {
   const string mapa_name;
   const string node_name;
   MetaMapa * mapa_ptr = nullptr;
   Net::Node * src = nullptr;
   Net net;
-  Cover(const string & mapa, const string & node) 
-    : Exp(COVER), mapa_name(mapa), node_name(node) {}
+
+  SubNet(Exp::Type type, const string & mapa, const string & node) 
+    : Exp(type), mapa_name(mapa), node_name(node) {}
+  ExecStatus semant();
+};
+
+struct Cover : public SubNet
+{
+  Cover(const string & mapa_name, const string & node_name) 
+    : SubNet(COVER, mapa_name, node_name) {}
   ExecStatus execute();
   void free() {}
+};
+
+struct Upstream : public SubNet
+{
+  Exp * productor_exp = nullptr;
+  MetaProducto * producto_ptr = nullptr;
+  Upstream(const string & mapa_name, const string & node_name, Exp * prod_exp) 
+    : SubNet(UPSTREAM, mapa_name, node_name), productor_exp(prod_exp) {}
+  ExecStatus execute();
+  void free() { if (productor_exp->type != VAR) delete productor_exp; }
 };
 
 struct Help : public Exp

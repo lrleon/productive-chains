@@ -32,7 +32,7 @@
 };
 
 %token LOAD SAVE EXIT ERROR INFO LS RM SEARCH PRODUCER PRODUCERS LIST APPEND
-%token PRODUCT ID REGEX HELP COD TYPEINFO RIF NODE REACHABLE COVER DOT
+%token PRODUCT ID REGEX HELP COD TYPEINFO RIF NODE REACHABLE COVER DOT UPSTREAM
 %token <symbol> STRCONST INTCONST VARNAME 
 
 %type <expr> exp
@@ -90,11 +90,13 @@ cmd_unit: EXIT
         | DOT VARNAME ref_exp { $$ = new Dot($2, $3); }
 ;
 
-help_exp: HELP          { $$ = new Help; }
-        | HELP LOAD     { $$ = new Help(Exp::Type::MAP); }
-        | HELP SEARCH   { $$ = new Help(Exp::Type::SEARCHPRODUCER); }
-        | HELP TYPEINFO { $$ = new Help(Exp::Type::TYPEINFO); }
-        | HELP INFO     { $$ = new Help(Exp::Type::INFO); }
+help_exp: HELP           { $$ = new Help; }
+        | HELP LOAD      { $$ = new Help(Exp::Type::MAP); }
+        | HELP SEARCH    { $$ = new Help(Exp::Type::SEARCHPRODUCER); }
+        | HELP TYPEINFO  { $$ = new Help(Exp::Type::TYPEINFO); }
+        | HELP INFO      { $$ = new Help(Exp::Type::INFO); }
+        | HELP REACHABLE { $$ = new Help(Exp::Type::REACHABLE); }
+        | HELP COVER     { $$ = new Help(Exp::Type::COVER); }
 ;
 
 item_list: ref_exp 
@@ -198,6 +200,10 @@ exp : LOAD ref_exp
     | COVER VARNAME VARNAME
       {
 	$$ = new Cover($2, $3);
+      }
+    | UPSTREAM VARNAME VARNAME ref_exp
+      {
+	$$ = new Upstream($2, $3, $4);
       }
 ;
 
@@ -475,6 +481,7 @@ ExecStatus Assign::execute()
 	return make_pair(true, "");
       }
     case Exp::Type::COVER:
+    case Exp::Type::UPSTREAM:
       {
 	again_cover:
 	auto var = left_side->get_value_ptr();
@@ -1356,7 +1363,7 @@ ExecStatus Connected::execute()
   return make_pair(true, "");
 }
 
-ExecStatus Cover::execute()
+ExecStatus SubNet::semant()
 {
   auto p = ::semant_mapa(mapa_name);
   if (not p.first.first)
@@ -1379,9 +1386,77 @@ ExecStatus Cover::execute()
     }
 
   src = var->node_ptr;
+
+  return make_pair(true, "");
+}
+
+ExecStatus Cover::execute()
+{
+  auto r = semant();
+  if (not r.first)
+    return r;
+  
   cout << "Building cover graph from " << *src->get_info() << endl;
   net = Build_Subgraph<Net>()(mapa_ptr->net, src);
 
+  return make_pair(true, "");
+}
+
+ExecStatus Upstream::execute()
+{
+  auto r = semant();
+  if (not r.first)
+    return r;
+
+  stringstream s;
+  r = productor_exp->execute();
+  if (not r.first)
+    return r;
+
+  switch (productor_exp->type)
+    {
+    case INTCONST: 
+      {
+	Uid id = static_cast<IntExp*>(productor_exp)->value;
+	producto_ptr = mapa_ptr->tabla_productos(id);
+	if (producto_ptr == nullptr)
+	  {
+	    s << "Product id " << id << " not found";
+	    return make_pair(false, s.str());
+	  }
+	break;
+      }
+    case STRCONST:
+      {
+	// puede ser un codigo arancelario
+      }
+    case VAR:
+      {
+
+      }
+    default:
+      s << "Upstream> productor exp is invalid. This is possibly a buf" << endl
+	<< "Please report it";
+      return make_pair(false, s.str());
+    }
+
+  auto productor_ptr = src->get_info();
+  const string & cod_aran = producto_ptr->cod_aran;
+  if (not productor_ptr->productos.exists([&cod_aran] (auto p)
+					  {
+					    return p.second == cod_aran;
+					  }))
+    {
+      s << "Codigo arancelario de producto " << producto_ptr->id << " "
+	<< cod_aran << " (" << producto_ptr->nombre << ")" << endl
+	<< "no está entre los productos del productor " << node_name;
+      return make_pair(false, s.str());
+    }
+  
+  cout << "Building upstream net from " << *src->get_info() << endl;
+  net = mapa_ptr->upstream(src, producto_ptr);
+
+  free();
   return make_pair(true, "");
 }
 

@@ -271,7 +271,7 @@ private:
      enteramente en el conjunto de arcos de entrada de tgt 
   */
   MetaProducto * first_match(Node * tgt, 
-			     const DynList<MetaProducto*> & productos) 
+			     const DynList<MetaProducto*> & productos) const
   {
     // Códigos arancelarios de todos los arcos entrantes a tgt
     DynSetHash<string> arc_codes;
@@ -312,14 +312,28 @@ private:
 	
 	auto ssrc = net.get_src_node(a);
 	auto tsrc = net_up.insert_node(ssrc->get_info());
-	auto ta = net_up.insert_arc(tsrc, ttgt, a->get_info());
+	net_up.insert_arc(tsrc, ttgt, a->get_info());
 
-	// upstream(ssrc, 
+	string & cod_aran = a->get_info().cod_aran;
+	auto productor_ptr = ssrc->get_info();
+ 	auto productos = inter_productor_cod_aran(productor_ptr, cod_aran);
+	MetaProducto * first_prod = first_match(ssrc, productos);
+
+	upstream(ssrc, first_prod, net_up, tsrc);
       }
-
   }
 
 public:
+
+  Net upstream(Node * ssrc, MetaProducto * producto_ptr) const
+  {
+    Net ret;
+
+    auto tsrc = ret.insert_node(ssrc->get_info());
+    upstream(ssrc, producto_ptr, ret, tsrc);
+
+    return ret;
+  }
 
   // {
   //   DynList<Node*> ret;
