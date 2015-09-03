@@ -97,6 +97,7 @@ help_exp: HELP           { $$ = new Help; }
         | HELP INFO      { $$ = new Help(Exp::Type::INFO); }
         | HELP REACHABLE { $$ = new Help(Exp::Type::REACHABLE); }
         | HELP COVER     { $$ = new Help(Exp::Type::COVER); }
+        | HELP UPSTREAM  { $$ = new Help(Exp::Type::UPSTREAM); }
 ;
 
 item_list: ref_exp 
@@ -203,7 +204,11 @@ exp : LOAD ref_exp
       }
     | UPSTREAM VARNAME VARNAME ref_exp
       {
-	$$ = new Upstream($2, $3, $4);
+	$$ = new UpstreamF($2, $3, $4);
+      }
+    | UPSTREAM VARNAME VARNAME ref_exp ref_exp
+      {
+
       }
 ;
 
@@ -1402,7 +1407,7 @@ ExecStatus Cover::execute()
   return make_pair(true, "");
 }
 
-ExecStatus Upstream::execute()
+ExecStatus UpstreamF::execute()
 {
   auto r = semant();
   if (not r.first)
@@ -1454,7 +1459,7 @@ ExecStatus Upstream::execute()
     }
   
   cout << "Building upstream net from " << *src->get_info() << endl;
-  net = mapa_ptr->upstream(src, producto_ptr);
+  net = mapa_ptr->upstream_first(src, producto_ptr);
 
   free();
   return make_pair(true, "");

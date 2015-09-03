@@ -288,11 +288,21 @@ struct Cover : public SubNet
   void free() {}
 };
 
-struct Upstream : public SubNet
+struct UpstreamF : public SubNet
 {
   Exp * productor_exp = nullptr;
   MetaProducto * producto_ptr = nullptr;
-  Upstream(const string & mapa_name, const string & node_name, Exp * prod_exp) 
+  UpstreamF(const string & mapa_name, const string & node_name, Exp * prod_exp) 
+    : SubNet(UPSTREAM, mapa_name, node_name), productor_exp(prod_exp) {}
+  ExecStatus execute();
+  void free() { if (productor_exp->type != VAR) delete productor_exp; }
+};
+
+struct UpstreamB : public SubNet
+{
+  Exp * productor_exp = nullptr;
+  MetaProducto * producto_ptr = nullptr;
+  UpstreamB(const string & mapa_name, const string & node_name, Exp * prod_exp) 
     : SubNet(UPSTREAM, mapa_name, node_name), productor_exp(prod_exp) {}
   ExecStatus execute();
   void free() { if (productor_exp->type != VAR) delete productor_exp; }

@@ -107,6 +107,32 @@ static const char * cover =
 R"(Calcula el grafo total de crubrimiento a partir de un nodo
    
        cover <mapa-var> <nodo-var>
+
+   El grafo de cubrimiento es el grafo total que es alcanzable desde el nodo
+   <nodo-var>. 
+
+   <nodo-var> debe ser una variable de tipo nodo asignada mediante search node
+   )";
+
+static const char * upstream =
+R"(Calcula el grafo aguas arriba a partir de un nodo y un producto
+   
+       upstream <mapa-var> <nodo-var> <prod-exp>
+
+   Dado la variable nodo <nodo-var> sobre el mapa <mapa-var>, upstream revisa 
+   la composición de insumos del producto en la expresión <prod-var>. A 
+   partir de allí se miran hacia atrás los arcos de entrada de <nodo-var>
+   que se correspondan con los insumos de <prod-var>. Luego, recursivamente, 
+   se examinan los nodos asociados a los insumos y así recursivamente hasta 
+   que ya nos sea posible.
+
+   <prod-var> puede ser:
+
+   1. Una constante o variable string conteniendo un código arancelario
+
+   2. Una constante o variable entera conteniendo el id del producto
+
+   3. Una variable de tipo producto
    )";
 
 ExecStatus Help::execute()
@@ -124,6 +150,7 @@ ExecStatus Help::execute()
     case INFO: cout << info << endl; break;
     case REACHABLE: cout << reachable << endl; break;
     case COVER: cout << cover << endl; break;
+    case UPSTREAM: cout << cover << endl; break;
     default: cout << "No help topic" << endl; break;
     }
   return make_pair(true, "");

@@ -4,9 +4,12 @@
 
 # include <regex>
 # include <iomanip>
+# include <vector>
 # include <tpl_union.H>
 # include <tpl_test_path.H>
 # include <grafo.H>
+# include <utils.H>
+
 
 using Net = Array_Graph<Graph_Anode<Productor*>, Graph_Aarc<Arco>>;
 
@@ -290,10 +293,29 @@ private:
     return nullptr;
   }
 
-  void upstream(Node * stgt,                     // Nodo de partida
-		MetaProducto * tgt_producto_ptr, // productor de cod_aran
-		Net & net_up,                    // red aguas arriba resultado
-		Node * ttgt) const               // imagen de stgt en net_up
+  MetaProducto * min_distance_match(const DynList<MetaProducto*> & productos,
+				    const string & input_name) const
+  {
+    using Dist = tuple<size_t, MetaProducto*>;
+
+    auto name = only_alpha(input_name);
+
+    Dist m = make_tuple(numeric_limits<size_t>::max(), nullptr);
+    auto r = productos.foldl<Dist>(m, [&name] (const Dist & d, auto ptr)
+      {
+	auto dist = levenshtein(ptr->nombre, name);
+	if (get<0>(d) < dist)
+	  return make_tuple(dist, ptr);
+	return d;
+      }); 
+    return get<1>(r);
+  }
+
+  void 
+  upstream_first(Node * stgt,                     // Nodo de partida
+		 MetaProducto * tgt_producto_ptr, // productor de cod_aran
+		 Net & net_up,                    // red aguas arriba resultado
+		 Node * ttgt) const               // imagen de stgt en net_up
   {
     assert(stgt->get_info() == ttgt->get_info());
     const auto & tgt_productor = *stgt->get_info();
@@ -319,18 +341,64 @@ private:
  	auto productos = inter_productor_cod_aran(productor_ptr, cod_aran);
 	MetaProducto * first_prod = first_match(ssrc, productos);
 
-	upstream(ssrc, first_prod, net_up, tsrc);
+	upstream_first(ssrc, first_prod, net_up, tsrc);
+      }
+  }
+
+  void 
+  upstream_best(Node * stgt,                     // Nodo de partida
+		MetaProducto * tgt_producto_ptr, // productor de cod_aran
+		Net & net_up,                    // red aguas arriba resultado
+		Node * ttgt) const               // imagen de stgt en net_up
+  {
+    assert(stgt->get_info() == ttgt->get_info());
+    const auto & tgt_productor = *stgt->get_info();
+
+    assert(tgt_productor.productos.exists([tgt_producto_ptr] (auto p)
+           { return p.second  == tgt_producto_ptr->cod_aran; }));
+
+    // Recorrer los arcos de src y visitar aquellos relacionados a inputs
+    const auto & inputs = tgt_producto_ptr->comb; // Insumos de prod
+    for (auto it = net.get_in_it(stgt); it. has_curr(); it.next())
+      {
+	auto a = it.get_curr();
+	if (not inputs.exists([id = a->get_info().insumo_id] (auto c)
+			      { return id == get<0>(c); }))
+	  continue;
+	
+	auto ssrc = net.get_src_node(a);
+	auto tsrc = net_up.insert_node(ssrc->get_info());
+	net_up.insert_arc(tsrc, ttgt, a->get_info());
+
+	const auto & info = a->get_info();
+	const string & cod_aran = info.cod_aran;
+	auto productor_ptr = ssrc->get_info();
+	auto input_name = tabla_insumos(info.insumo_id)->nombre;
+ 	auto productos = inter_productor_cod_aran(productor_ptr, cod_aran);
+	MetaProducto * best_prod = min_distance_match(productos, input_name);
+
+	upstream_best(ssrc, best_prod, net_up, tsrc);
       }
   }
 
 public:
 
-  Net upstream(Node * ssrc, MetaProducto * producto_ptr) const
+  Net upstream_first(Node * ssrc, MetaProducto * producto_ptr) const
   {
     Net ret;
 
     auto tsrc = ret.insert_node(ssrc->get_info());
-    upstream(ssrc, producto_ptr, ret, tsrc);
+    upstream_first(ssrc, producto_ptr, ret, tsrc);
+
+    return ret;
+  }
+
+  Net upstream_best(Node * ssrc, MetaProducto * producto_ptr) const
+  {
+    Net ret;
+
+    auto tsrc = ret.insert_node(ssrc->get_info());
+    upstream_best(ssrc, producto_ptr, ret, tsrc);
 
     return ret;
   }

@@ -118,7 +118,7 @@ net: net.tab.c net-lex.o
 help.o: net-tree.H help.C
 	$(CXX) $(FLAGS) $(INCLUDE) -c help.C
 
-test: test.lex test.y net-parser.H net-symtbl.H net-tree.H $(OBJ)
+test: test.lex test.y net-parser.H net-symtbl.H net-tree.H net.H utils.H $(OBJ)
 	$(FLEX) -o test.C test.lex 
 	$(YACC) -d -t --report-=all test.y
 	$(CXX) $(FLAGS) $(INCLUDE) -c test.tab.c
