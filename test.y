@@ -208,7 +208,7 @@ exp : LOAD ref_exp
       }
     | UPSTREAM VARNAME VARNAME ref_exp ref_exp
       {
-
+	$$ = new UpstreamB($2, $3, $4, $5);
       }
 ;
 
@@ -216,15 +216,13 @@ ref_exp : STRCONST
             {
 	      assert(string_table($1));
 	      auto symbol = string_table($1);
-	      StringExp * str_exp = new StringExp(symbol);
-	      $$ = str_exp;
+	      $$ = new StringExp(symbol);
 	    }
           | INTCONST
 	    {
 	      assert(id_table($1) == $1);
 	      auto symbol = id_table($1);
-	      IntExp * int_exp = new IntExp(symbol);
-	      $$ = int_exp;
+	      $$ = new IntExp(symbol);
 	    }
           | rvalue
 	    {
@@ -305,7 +303,10 @@ ExecStatus Assign::execute()
 {
   auto result = right_side->execute();
   if (not result.first)
-    return result;
+    {
+      right_side->free();
+      return result;
+    }
 
   Varname * left_side = var_tbl(left_name);
   if (left_side == nullptr)
@@ -1407,22 +1408,22 @@ ExecStatus Cover::execute()
   return make_pair(true, "");
 }
 
-ExecStatus UpstreamF::execute()
+ExecStatus UpstreamF::semant()
 {
-  auto r = semant();
+  auto r = SubNet::semant();
   if (not r.first)
     return r;
 
   stringstream s;
-  r = productor_exp->execute();
+  r = product_exp->execute();
   if (not r.first)
     return r;
 
-  switch (productor_exp->type)
+  switch (product_exp->type)
     {
-    case INTCONST: 
+    case INTCONST: // insumo_id
       {
-	Uid id = static_cast<IntExp*>(productor_exp)->value;
+	Uid id = static_cast<IntExp*>(product_exp)->value;
 	producto_ptr = mapa_ptr->tabla_productos(id);
 	if (producto_ptr == nullptr)
 	  {
@@ -1431,13 +1432,39 @@ ExecStatus UpstreamF::execute()
 	  }
 	break;
       }
-    case STRCONST:
-      {
-	// puede ser un codigo arancelario
-      }
     case VAR:
       {
+	auto varname = static_cast<Varname*>(product_exp);
+	auto var = varname->get_value_ptr();
+	if (var == nullptr)
+	  {
+	    s << "var name " << varname->name << " has not a value" << endl
+	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
+	    return make_pair(false, s.str());
+	  }
+	switch (var->var_type)
+	  {
+	  case Var::VarType::Int: 
+	    {
+	      Uid id = static_cast<VarInt*>(var)->value;
+	      producto_ptr = mapa_ptr->tabla_productos(id);
+	      if (producto_ptr == nullptr)
+		{
+		  s << "Product id " << id << " contained in var "
+		    << varname->name << " not found";
+		  return make_pair(false, s.str());
+		}
+	      break;
+	    }
+	  case Var::VarType::Product: 
+	    producto_ptr = &static_cast<VarProduct*>(var)->product;
+	    break;
+	  default:
+	    s << "Var " << varname->name << " is not integer or product";
+	    return make_pair(false, s.str());
+	  }
 
+	break;
       }
     default:
       s << "Upstream> productor exp is invalid. This is possibly a buf" << endl
@@ -1458,8 +1485,68 @@ ExecStatus UpstreamF::execute()
       return make_pair(false, s.str());
     }
   
+  return make_pair(true, "");
+}
+
+ExecStatus UpstreamF::execute()
+{
+  auto r = semant();
+  if (not r.first)
+    return r;
+
   cout << "Building upstream net from " << *src->get_info() << endl;
   net = mapa_ptr->upstream_first(src, producto_ptr);
+  cout << "done!";
+  free();
+  return make_pair(true, "");
+}
+
+ExecStatus UpstreamB::execute()
+{
+  auto r = semant();
+  if (not r.first)
+    return r;
+
+  auto tmp = static_cast<IntExp*>(threshold_exp);
+  cout << tmp->type_string() << endl
+       << tmp->value << endl;
+
+  r = threshold_exp->execute();
+  if (not r.first)
+    return r;
+
+  stringstream s;
+  switch (threshold_exp->type)
+    {
+    case INTCONST:
+      threshold = static_cast<IntExp*>(threshold_exp)->value;
+      break;
+    case VAR:
+      {
+	auto varname = static_cast<Varname*>(threshold_exp);
+	auto var = static_cast<VarInt*>(varname->get_value_ptr());
+	if (var == nullptr)
+	  {
+	    s << "var name " << varname->name << " has not a value" << endl
+	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
+	    return make_pair(false, s.str());
+	  }
+	if (var->var_type != Var::VarType::Int)
+	  {
+	    s << "var name " << varname->name << " is an integer";
+	    return make_pair(false, s.str());
+	  }
+	threshold = var->value;
+	break;
+      }
+    default:
+      s << "Threshold for edit distance is not an integer expression";
+      return make_pair(false, s.str());
+    }
+
+  cout << "Building upstream net from " << *src->get_info() << endl;
+  net = mapa_ptr->upstream_best(src, producto_ptr, threshold);
+  cout << "done!";
 
   free();
   return make_pair(true, "");

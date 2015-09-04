@@ -43,7 +43,7 @@ struct Exp : public ASTNode
 	      SEARCHPRODUCER, APPEND, LISTREAD, LISTWRITE, SEARCHPRODUCERREGEX,
 	      SEARCHPRODUCTID, SEARCHPRODUCTREGEX, SEARCHPRODUCTCOD,
 	      SEARCHPRODUCTRIF, SEARCHNODE, NODE, COVER, REACHABLE,
-	      UPSTREAM,
+	      UPSTREAM, VALID,
 	      TYPEINFO, HELP, DOT, BLOCKS, ERROR } type;
 
   string type_string() const
@@ -76,6 +76,7 @@ struct Exp : public ASTNode
       case DOT: return "DOT";
       case BLOCKS: return "BLOCKS";
       case UPSTREAM: return "UPSTREAM";
+      case VALID: return "VALID";
       default: ERROR("Tipo de expresion invalido");
       }
     return string("INVALID");
@@ -96,6 +97,15 @@ struct ErrorExp : Exp
   ExecStatus execute() { return make_pair(false, msg); }
   void free() {}
 };
+
+// struct Valid
+// {
+//   string net_name;
+//   Net * net_ptr = nullptr;
+//   Valid(const string & name) : Exp(VALID), net_name(name) {}
+//   ExecStatus execute();
+//   void free() {}
+// };
 
 struct Dot : public Exp
 {
@@ -290,22 +300,28 @@ struct Cover : public SubNet
 
 struct UpstreamF : public SubNet
 {
-  Exp * productor_exp = nullptr;
+  Exp * product_exp = nullptr;
   MetaProducto * producto_ptr = nullptr;
   UpstreamF(const string & mapa_name, const string & node_name, Exp * prod_exp) 
-    : SubNet(UPSTREAM, mapa_name, node_name), productor_exp(prod_exp) {}
+    : SubNet(UPSTREAM, mapa_name, node_name), product_exp(prod_exp) {}
+  ExecStatus semant();
   ExecStatus execute();
-  void free() { if (productor_exp->type != VAR) delete productor_exp; }
+  void free() { if (product_exp->type != VAR) delete product_exp; }
 };
 
-struct UpstreamB : public SubNet
+struct UpstreamB : public UpstreamF
 {
-  Exp * productor_exp = nullptr;
-  MetaProducto * producto_ptr = nullptr;
-  UpstreamB(const string & mapa_name, const string & node_name, Exp * prod_exp) 
-    : SubNet(UPSTREAM, mapa_name, node_name), productor_exp(prod_exp) {}
+  Exp * threshold_exp = nullptr;
+  size_t threshold = 0;
+  UpstreamB(const string & mapa_name, const string & node_name, 
+	    Exp * prod_exp, Exp * th_exp) 
+    : UpstreamF(mapa_name, node_name, prod_exp), threshold_exp(th_exp) {}
   ExecStatus execute();
-  void free() { if (productor_exp->type != VAR) delete productor_exp; }
+  void free() 
+  { 
+    if (product_exp->type != VAR) delete product_exp;
+    if (threshold_exp->type != VAR) delete threshold_exp; 
+  }
 };
 
 struct Help : public Exp
@@ -437,10 +453,8 @@ struct VarString : public Var
 {
   string value;
   VarString() : Var(String) {}
-
   VarString * clone() const { return new VarString; }
   void copy(Var * src) { value = static_cast<VarString*>(src)->value; }
-
   string info() const { return "String var: \"" + value + "\"\n"; }
   string type_info() const { return "String var"; }
 };
@@ -449,7 +463,6 @@ struct VarInt : public Var
 {
   long value;
   VarInt() : Var(Int) {}
-
   VarInt * clone() const { return new VarInt; }
   void copy(Var * src) { value = static_cast<VarInt*>(src)->value; }
   string info() const { return "Int var: " + to_string(value); }
@@ -461,7 +474,6 @@ struct IntExp : public Exp
   const long value;
 
   IntExp(const string & val) : Exp(INTCONST), value(stol(val)) {}
-
   ExecStatus execute() { return make_pair(true, ""); }
   void free() {}
 };

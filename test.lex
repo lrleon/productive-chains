@@ -275,6 +275,10 @@ int main()
   // sigIntHandler.sa_flags = 0;
   // sigaction(SIGINT, &sigIntHandler, NULL);
 
+  if (not resize_process_stack(128*1024*1024))
+    cout << "Warning: cannot resize process stack" << endl
+	 << endl;
+
   for (size_t i = 0; true;) 
      {
        string prompt = get_prompt(i);

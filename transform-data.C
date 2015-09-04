@@ -91,8 +91,9 @@ void process_comand_line(int argc, char *argv[])
 	  "nombre archivo de arcos (relación insumo/producto");
   cmd.add(arcos);
 
-  ValueArg<long> anho("A", "anho", "año de estudio", false, 2012,
+  ValueArg<long> anho("y", "anho", "año de estudio", false, 2012,
 		      "Año para el cual se desea transformar la data");
+  cmd.add(anho);
 
   ValueArg<size_t> feedback("f", "feedback", "Num de iteraciones en verbose",
 			    false, 10000, 

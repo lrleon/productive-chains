@@ -293,22 +293,24 @@ private:
     return nullptr;
   }
 
-  MetaProducto * min_distance_match(const DynList<MetaProducto*> & productos,
-				    const string & input_name) const
-  {
-    using Dist = tuple<size_t, MetaProducto*>;
+  using Dist = tuple<size_t, MetaProducto*>;
 
+  Dist min_distance_match(const DynList<MetaProducto*> & productos,
+			  const string & input_name,
+			  const size_t threshold) const
+  {
     auto name = only_alpha(input_name);
 
     Dist m = make_tuple(numeric_limits<size_t>::max(), nullptr);
-    auto r = productos.foldl<Dist>(m, [&name] (const Dist & d, auto ptr)
+    auto r = 
+      productos.foldl<Dist>(m, [&name, threshold] (const Dist & d, auto ptr)
       {
-	auto dist = levenshtein(ptr->nombre, name);
-	if (get<0>(d) < dist)
+	auto dist = levenshtein(only_alpha(ptr->nombre), name);
+	if (dist < threshold and dist < get<0>(d))
 	  return make_tuple(dist, ptr);
 	return d;
       }); 
-    return get<1>(r);
+    return r;
   }
 
   void 
@@ -320,17 +322,31 @@ private:
     assert(stgt->get_info() == ttgt->get_info());
     const auto & tgt_productor = *stgt->get_info();
 
+    if (not tgt_productor.productos.exists([tgt_producto_ptr] (auto p)
+        { return p.second  == tgt_producto_ptr->cod_aran; }))
+      {
+	cout << "Lista de productos de " << tgt_productor.rif 
+	     << " quien produce " << tgt_producto_ptr->cod_aran << endl;
+	tgt_productor.productos.for_each([] (auto p)
+          {
+	    cout << p.first << " " << p.second << endl;
+	  });
+	exit(0);
+      }
+
     assert(tgt_productor.productos.exists([tgt_producto_ptr] (auto p)
            { return p.second  == tgt_producto_ptr->cod_aran; }));
 
     // Recorrer los arcos de src y visitar aquellos relacionados a inputs
-    const auto & inputs = tgt_producto_ptr->comb; // Insumos de prod
+    const auto & inputs = tgt_producto_ptr->comb; // inputs de tgt_producto_ptr
     for (auto it = net.get_in_it(stgt); it. has_curr(); it.next())
       {
 	auto a = it.get_curr();
 	if (not inputs.exists([id = a->get_info().insumo_id] (auto c)
 			      { return id == get<0>(c); }))
 	  continue;
+
+	// a es el arco cuyo insumo_id pertenece a inputs de tgt_producto_ptr
 	
 	auto ssrc = net.get_src_node(a);
 	auto tsrc = net_up.insert_node(ssrc->get_info());
@@ -339,45 +355,81 @@ private:
 	string & cod_aran = a->get_info().cod_aran;
 	auto productor_ptr = ssrc->get_info();
  	auto productos = inter_productor_cod_aran(productor_ptr, cod_aran);
-	MetaProducto * first_prod = first_match(ssrc, productos);
+	auto first_prod = first_match(ssrc, productos);
 
-	upstream_first(ssrc, first_prod, net_up, tsrc);
+	if (first_prod != nullptr)
+	  upstream_first(ssrc, first_prod, net_up, tsrc);
       }
   }
-
+  
+  static const long Visited = Convert_Tree;
+  
   void 
   upstream_best(Node * stgt,                     // Nodo de partida
 		MetaProducto * tgt_producto_ptr, // productor de cod_aran
 		Net & net_up,                    // red aguas arriba resultado
-		Node * ttgt) const               // imagen de stgt en net_up
+		Node * ttgt,                     // imagen de stgt en net_up
+		size_t threshold) const          // tolerancia en string dist
   {
     assert(stgt->get_info() == ttgt->get_info());
+
     const auto & tgt_productor = *stgt->get_info();
 
     assert(tgt_productor.productos.exists([tgt_producto_ptr] (auto p)
            { return p.second  == tgt_producto_ptr->cod_aran; }));
+    
+    if (IS_NODE_VISITED(stgt, Visited))
+      {
+	cout << "Warning: cycle detected at node " << tgt_productor.rif
+	     << " " << tgt_productor.nombre << endl;
+	return;
+      }
+    NODE_BITS(stgt).set_bit(Visited, true);
+
+    DynMapTree<Uid, LinearFactor> inputs;
+    tgt_producto_ptr->comb.for_each([&inputs] (auto fact)
+				    {
+				      inputs.insert(get<0>(fact), fact);
+				    });
 
     // Recorrer los arcos de src y visitar aquellos relacionados a inputs
-    const auto & inputs = tgt_producto_ptr->comb; // Insumos de prod
-    for (auto it = net.get_in_it(stgt); it. has_curr(); it.next())
+    for (auto it = net.get_in_it(stgt); 
+	 it.has_curr() and not inputs.is_empty(); it.next())
       {
 	auto a = it.get_curr();
-	if (not inputs.exists([id = a->get_info().insumo_id] (auto c)
-			      { return id == get<0>(c); }))
+	const auto & info = a->get_info();
+	const Uid insumo_id = info.insumo_id;
+	auto p = inputs.search(insumo_id);
+	if (p == nullptr) // arco a se corresponde con algún input?
 	  continue;
-	
+
+	inputs.remove(insumo_id);
+
 	auto ssrc = net.get_src_node(a);
-	auto tsrc = net_up.insert_node(ssrc->get_info());
+	auto productor_ptr = ssrc->get_info();
+	
+	Node * tsrc = nullptr;
+	if (NODE_COOKIE(ssrc))
+	  tsrc = mapped_node<Net>(ssrc);
+	else
+	  {
+	    tsrc = net_up.insert_node(ssrc->get_info());
+	    Net::map_nodes(ssrc, tsrc);
+	  }
 	net_up.insert_arc(tsrc, ttgt, a->get_info());
 
-	const auto & info = a->get_info();
 	const string & cod_aran = info.cod_aran;
-	auto productor_ptr = ssrc->get_info();
-	auto input_name = tabla_insumos(info.insumo_id)->nombre;
+	const auto & input_name = tabla_insumos(insumo_id)->nombre;
  	auto productos = inter_productor_cod_aran(productor_ptr, cod_aran);
-	MetaProducto * best_prod = min_distance_match(productos, input_name);
-
-	upstream_best(ssrc, best_prod, net_up, tsrc);
+	auto dist = min_distance_match(productos, input_name, threshold);
+	
+	auto prod = get<1>(dist);
+	if (prod != nullptr)
+	  {
+	    cout << "Expanding " << productor_ptr->nombre << " - "
+	     	 << prod->nombre << endl;
+	    upstream_best(ssrc, get<1>(dist), net_up, tsrc, threshold);
+	  }
       }
   }
 
@@ -385,20 +437,23 @@ public:
 
   Net upstream_first(Node * ssrc, MetaProducto * producto_ptr) const
   {
+    
     Net ret;
-
     auto tsrc = ret.insert_node(ssrc->get_info());
     upstream_first(ssrc, producto_ptr, ret, tsrc);
 
     return ret;
   }
 
-  Net upstream_best(Node * ssrc, MetaProducto * producto_ptr) const
+  Net upstream_best(Node * ssrc, MetaProducto * producto_ptr, 
+		    size_t threshold) const
   {
+    net.reset_nodes();
     Net ret;
 
     auto tsrc = ret.insert_node(ssrc->get_info());
-    upstream_best(ssrc, producto_ptr, ret, tsrc);
+    Net::map_nodes(ssrc, tsrc);
+    upstream_best(ssrc, producto_ptr, ret, tsrc, threshold);
 
     return ret;
   }

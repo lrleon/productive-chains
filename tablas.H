@@ -321,6 +321,8 @@ struct TablaPlantas : public HashType<Planta, Planta::CmpEqual>
   }
 };
 
+using LinearFactor = tuple<Uid, string, double>;
+
 struct Producto
 {
   Uid id;
@@ -336,8 +338,7 @@ struct Producto
   // y la cantidad requerida para fabricar una unidad del
   // producto. Sirve como huella dactilar de un producto pero también
   // para filtrar arcos en un grafo
-  using Term = tuple<Uid, string, double>;
-  DynList<Term> comb;
+  DynList<LinearFactor> comb;
 
   Producto(Uid i = -1) : id(i) {}
 
@@ -771,7 +772,7 @@ struct MetaProducto
     s << endl
       << comb.size() << " : ";
     comb.for_each([&s] (auto c) 
-      { s << "("<< get<0>(c) << "," << get<1>(c) << "," << get<2>(c) << ")"; });
+      { s << "("<< get<0>(c) << " " << get<1>(c) << " " << get<2>(c) << ")"; });
     return s.str();
   }
 
@@ -826,6 +827,8 @@ struct MetaProducto
 	s >> id >> cod >> factor;
 	comb.append(make_tuple(id, cod, factor));
       }
+    assert(eq(sort(comb.map<Uid>([] (auto c) { return get<0>(c); })), 
+	      sort(unique(comb).map<Uid>([] (auto c) { return get<0>(c); }))));
   }
 };
 
