@@ -135,6 +135,50 @@ R"(Calcula el grafo aguas arriba a partir de un nodo y un producto
    3. Una variable de tipo producto
    )";
 
+static const char * up =
+R"(Calcula el grafo aguas arriba a partir de un nodo y un producto
+   
+       upstream <mapa-var> <nodo-var> <prod-exp> <int-exp>
+
+   Dado la variable nodo <nodo-var> sobre el mapa <mapa-var>, upstream revisa 
+   la composición de insumos del producto en la expresión <prod-var>. A 
+   partir de allí se miran hacia atrás los arcos de entrada de <nodo-var>
+   que se correspondan con los insumos de <prod-var>. Luego, recursivamente, 
+   se examinan los nodos asociados a los insumos y así recursivamente hasta 
+   que ya nos sea posible.
+
+   <prod-var> puede ser:
+
+     1. Una constante o variable string conteniendo un código arancelario
+
+     2. Una constante o variable entera conteniendo el id del producto
+
+     3. Una variable de tipo producto
+
+   Los insumos son buscados mediante comparación con los nombres de insumo 
+   versus producto. Para ello el criterio de mínima distancia de edición es
+   usado en cojunto con un límte máximo entero <th-exp>. Si el nombre de insumo 
+   más cercano al nombre del producto en distancia de edición excede <th-exp>
+   entonces el insumo no es considerado
+   )";
+
+static const char * inputs =
+R"(Calcula los insumos de entrada de un producto o los arcos de entrada de 
+   un nodo.
+   
+       inputs <mapa-var> <nodo-var>
+
+   Retorna los arcos de entrada del nodo <nodo-var> en el mapa <mapa-var>
+
+
+       input <mapa-vap> <producto-exp>
+
+   Retorna los insumos requeridos para fabricar el producto <producto-exp>.
+   
+   <producto-exp> puede ser un entero en cuyo caso se asume es un producto_id,
+   o una variable entera conteniendo el producto_id o una variable producto.
+   )";
+
 ExecStatus Help::execute()
 {
   cout << endl;
@@ -150,7 +194,8 @@ ExecStatus Help::execute()
     case INFO: cout << info << endl; break;
     case REACHABLE: cout << reachable << endl; break;
     case COVER: cout << cover << endl; break;
-    case UPSTREAM: cout << cover << endl; break;
+    case UPSTREAM: cout << up << endl; break;
+    case INPUTS: cout << inputs << endl; break;
     default: cout << "No help topic" << endl; break;
     }
   return make_pair(true, "");

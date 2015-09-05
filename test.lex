@@ -79,6 +79,7 @@ REACHABLE    [rR][eE][aA][cC][hH][aA][bB][lL][eE]
 COVER        [cC][oO][vV][eE][rR]
 DOT          [dD][oO][tT]
 UPSTREAM     [uU][pP][sS][tT][rR][eE][aA][mM]
+INPUTS       [iI][nN][pP][uU][tT][sS]
 
 SPACE           [ \f\r\t\v]
 
@@ -118,6 +119,7 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
 {COVER}      return COVER;
 {DOT}        return DOT;
 {UPSTREAM}   return UPSTREAM;
+{INPUTS}     return INPUTS;
 
  /*
   * The single-characters tokens 

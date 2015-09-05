@@ -79,7 +79,7 @@ struct Nodo
     }
   };
 };
-
+ 
 struct Arco
 {
   Uid arco_id     = -1;
@@ -356,7 +356,8 @@ public:
 	double cantidad = atof(row(4).c_str());
 	const string & cod_aran = get<1>(lt);
 
-	producto_ptr->comb.insert(make_tuple(insumo_id, cod_aran, cantidad));
+	producto_ptr->comb.insert(make_tuple(insumo_id, cod_aran, 
+					     cantidad, arc_id));
 
 	for (auto it = get<0>(lt).get_it(); it.has_curr(); it.next())
 	  {

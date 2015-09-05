@@ -321,7 +321,8 @@ struct TablaPlantas : public HashType<Planta, Planta::CmpEqual>
   }
 };
 
-using LinearFactor = tuple<Uid, string, double>;
+                 // insumo_id, cod_aran, cantidad, arco_id
+using LinearFactor = tuple<Uid, string, double, Uid>;
 
 struct Producto
 {
@@ -756,12 +757,11 @@ struct Productor
 
 struct MetaProducto
 {
-  using Factor = tuple<Uid, string, double>;
   Uid id;
   string cod_aran;
   string nombre;
   DynSetTree<string> productores; // lista de rif de productores 
-  DynList<Factor> comb;   // lista uid insumo, cantidad
+  DynList<LinearFactor> comb;   // lista uid insumo, cantidad
 
   string to_string() const
   {
@@ -769,10 +769,6 @@ struct MetaProducto
     s << id << BLANK << cod_aran << BLANK << nombre << endl
       << productores.size() << " :";
     productores.for_each([&s] (auto p) { s << BLANK << p; });
-    s << endl
-      << comb.size() << " : ";
-    comb.for_each([&s] (auto c) 
-      { s << "("<< get<0>(c) << " " << get<1>(c) << " " << get<2>(c) << ")"; });
     return s.str();
   }
 
@@ -783,7 +779,7 @@ struct MetaProducto
 
   MetaProducto() {}
   MetaProducto(Uid i, const string & cod, const string & nom, 
-	       const DynList<Factor> & c)
+	       const DynList<LinearFactor> & c)
     : id(i), cod_aran(cod), nombre(nom), comb(c) {}
 
   void save(ostream & out) const
@@ -796,7 +792,8 @@ struct MetaProducto
 	<< comb.size();
     comb.for_each([&out] (auto c)
     { 
-      out << " " << get<0>(c) << " " << get<1>(c) << " " << get<2>(c); 
+      out << " " << get<0>(c) << " " << get<1>(c) << " " 
+	  << get<2>(c) << " " << get<3>(c);
     });
     out << endl;
   }
@@ -824,9 +821,11 @@ struct MetaProducto
 	Uid id;
 	string cod;
 	double factor;
-	s >> id >> cod >> factor;
-	comb.append(make_tuple(id, cod, factor));
+	Uid arc_id;
+	s >> id >> cod >> factor >> arc_id;
+	comb.append(make_tuple(id, cod, factor, arc_id));
       }
+
     assert(eq(sort(comb.map<Uid>([] (auto c) { return get<0>(c); })), 
 	      sort(unique(comb).map<Uid>([] (auto c) { return get<0>(c); }))));
   }

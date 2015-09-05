@@ -33,6 +33,7 @@
 
 %token LOAD SAVE EXIT ERROR INFO LS RM SEARCH PRODUCER PRODUCERS LIST APPEND
 %token PRODUCT ID REGEX HELP COD TYPEINFO RIF NODE REACHABLE COVER DOT UPSTREAM
+%token INPUTS
 %token <symbol> STRCONST INTCONST VARNAME 
 
 %type <expr> exp
@@ -88,6 +89,8 @@ cmd_unit: EXIT
         | help_exp { $$ = $1; }
         | REACHABLE VARNAME ref_exp ref_exp { $$ = new Connected($2, $3, $4); }
         | DOT VARNAME ref_exp { $$ = new Dot($2, $3); }
+        | INPUTS VARNAME VARNAME { $$ = new Inputs($2, $3); }
+        | INPUTS VARNAME INTCONST { $$ = new Inputs($2, $3); }
 ;
 
 help_exp: HELP           { $$ = new Help; }
@@ -98,6 +101,7 @@ help_exp: HELP           { $$ = new Help; }
         | HELP REACHABLE { $$ = new Help(Exp::Type::REACHABLE); }
         | HELP COVER     { $$ = new Help(Exp::Type::COVER); }
         | HELP UPSTREAM  { $$ = new Help(Exp::Type::UPSTREAM); }
+        | HELP INPUTS    { $$ = new Help(Exp::Type::INPUTS); }
 ;
 
 item_list: ref_exp 
@@ -972,12 +976,49 @@ ExecStatus SearchProducerRegexCmd::execute()
      return make_pair(true, "");
    }
 
- producers.for_each([] (auto p)
-   {
-     cout << *p << endl;
-   });
+ producers.for_each([] (auto p) { cout << *p << endl; });
 
  return make_pair(true, "");
+}
+
+static pair<ExecStatus, long> semant_int(Exp * int_exp)
+{
+  long id = -1;
+
+  auto r = int_exp->execute();
+  if (not r.first)
+    return make_pair(r, id);
+
+  switch (int_exp->type)
+    {
+    case Exp::Type::INTCONST:
+      id = static_cast<IntExp*>(int_exp)->value;
+      break;
+    case Exp::Type::VAR:
+      {
+	stringstream s;
+	auto varname = static_cast<Varname*>(int_exp);
+	auto var = varname->get_value_ptr();
+	if (var == nullptr)
+	  {
+	    s << "var name " << varname->name << " has not a value" << endl
+	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
+	    return make_pair(make_pair(false, s.str()), id);
+	  }
+	if (var->var_type != Var::VarType::Int)
+	  {
+	    s << "Var name " << varname->name << " is not an integer";
+	    return make_pair(make_pair(false, s.str()), id);
+	  }
+	id = static_cast<VarInt*>(var)->value;
+	break;
+      }
+    default: 
+      return make_pair(make_pair(false, 
+				 "Expression type if not a integer type"), id);
+    }
+
+  return make_pair(make_pair(true, ""), id);
 }
 
 ExecStatus Search::semant_int()
@@ -987,37 +1028,11 @@ ExecStatus Search::semant_int()
     return r;
   assert(mapa_ptr != nullptr);
   
-  r = exp->execute();
-  if (not r.first)
-    return r;
-
-  switch (exp->type)
-    {
-    case Exp::Type::INTCONST:
-      id = static_cast<IntExp*>(exp)->value;
-      break;
-    case Exp::Type::VAR:
-      {
-	stringstream s;
-	auto varname = static_cast<Varname*>(exp);
-	auto var = varname->get_value_ptr();
-	if (var == nullptr)
-	  {
-	    s << "var name " << varname->name << " has not a value" << endl
-	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
-	    return make_pair(false, s.str());
-	  }
-	if (var->var_type != Var::VarType::Int)
-	  {
-	    s << "Var name " << varname->name << " is not an integer";
-	    return make_pair(false, s.str());
-	  }
-	id = static_cast<VarInt*>(var)->value;
-	break;
-      }
-    default: 
-      ERROR("SearchProductId::execute() invalid type %ld", exp->type);
-    }
+  auto res = ::semant_int(exp);
+  if (not res.first.first)
+    return res.first;
+  
+  id = res.second;
 
   return make_pair(true, "");
 }
@@ -1591,4 +1606,265 @@ ExecStatus Dot::execute()
 
   free();
   return make_pair(true, "");
+}
+
+ExecStatus Inputs::execute()
+{
+  auto res = semant_mapa(mapa_name);
+  if (not res.first.first)
+    return res.first;
+  
+  mapa_ptr = res.second;
+
+  stringstream s;
+
+  if (producto_id != -1)
+    {
+      assert(name == "");
+      
+      producto_ptr = mapa_ptr->tabla_productos(producto_id);
+      if (producto_ptr == nullptr)
+	{
+	  s << "Product " << producto_id << " not found";
+	  return make_pair(false, s.str());
+	}      
+      report_product();
+      return make_pair(true, "");
+    }
+
+  auto varname = var_tbl(name);
+  if (varname == nullptr)
+    {
+      s << "var " << name << " not found";
+      return make_pair(false, s.str());
+    }
+  auto var = varname->get_value_ptr();
+  if (var == nullptr)
+    {
+      s << "var name " << name << " has not a value" << endl
+	<< "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
+      return make_pair(false, s.str());
+    }
+  switch (var->var_type)
+    {
+    case Var::VarType::Node:
+      node_ptr = static_cast<VarNode*>(var)->node_ptr;
+      report_node();
+      break;
+    case Var::VarType::Int:
+      producto_id = static_cast<VarInt*>(var)->value;
+      producto_ptr = mapa_ptr->tabla_productos(producto_id);
+      if (producto_ptr == nullptr)
+	{
+	  s << "Product " << producto_id << " not found";
+	  return make_pair(false, s.str());
+	}
+      report_product();
+      break;
+    case Var::VarType::Product:
+      producto_ptr = &static_cast<VarProduct*>(var)->product;
+      report_product();
+      break;
+    default:
+      s << "var " << name << " is not a product, node or integer type";
+      return make_pair(false, s.str());
+    }
+
+  return make_pair(true, "");
+}
+
+void Inputs::report_product()
+{
+  assert(producto_ptr);
+
+  in_place_sort(producto_ptr->comb, [] (auto p1, auto p2)
+		{
+		  return get<0>(p1) < get<0>(p2);
+		});
+
+  const string col0 = "insumo_id";
+  const string col1 = "cod_aran";
+  const string col2 = "cantidad";
+  const string col3 = "arco_id";
+
+  using Lens = tuple<size_t, size_t, size_t, size_t>;
+  using Line = tuple<string, string, string, string>;
+
+  DynList<Line> lines = producto_ptr->comb.map<Line>([] (auto c)
+    {
+      return make_tuple(to_string(get<0>(c)), get<1>(c), 
+			to_string(get<2>(c)), to_string(get<3>(c)));
+    });
+
+  Lens lens = lines.foldl<Lens>(make_tuple(col0.size(), col1.size(), 
+					   col2.size(), col3.size()),
+				[] (auto acu, auto l)
+    {
+      return make_tuple(max(get<0>(acu), get<0>(l).size()),
+			max(get<1>(acu), get<1>(l).size()),
+			max(get<2>(acu), get<2>(l).size()),
+			max(get<3>(acu), get<3>(l).size()));
+    });
+
+  cout << "Producto id = " << producto_ptr->id << endl
+       << "cod_aran    = " << producto_ptr->cod_aran << endl
+       << "Nombre      = " << producto_ptr->nombre << endl
+       << "Inputs:" << endl
+       << "    " << string(get<0>(lens) - col0.size(), ' ') << col0
+       << " " << string(get<1>(lens) - col1.size(), ' ') << col1
+       << " " << string(get<2>(lens) - col2.size(), ' ') << col2 
+       << " " << string(get<3>(lens) - col3.size(), ' ') << col3 << endl; 
+  lines.for_each([&lens] (auto l)
+  {
+    const string blanks0(get<0>(lens) - get<0>(l).size(), ' ');
+    const string blanks1(get<1>(lens) - get<1>(l).size(), ' ');
+    const string blanks2(get<2>(lens) - get<2>(l).size(), ' ');
+    const string blanks3(get<3>(lens) - get<3>(l).size(), ' ');
+    cout << "    " << blanks0 << get<0>(l) << blanks1 << " " << get<1>(l)
+	 << blanks2 << " " << get<2>(l) << blanks3 << " " << get<3>(l) << endl;
+  });
+}
+
+void Inputs::report_node()
+{
+  assert(node_ptr);
+
+  using Line = tuple<string, string, string, string, string, string, string>;
+  using Lens = tuple<size_t, size_t, size_t, size_t, size_t, size_t, size_t>;
+  
+  const string col0 = "arco_id";
+  const string col1 = "cod_aran";
+  const string col2 = "producto_id";
+  const string col3 = "insumo_id";
+  const string col4 = "factor";
+  const string col5 = "cantidad";
+  const string col6 = "coste";
+
+  auto lines = mapa_ptr->net.in_arcs(node_ptr).map<Line>([] (auto a)
+    {
+      const auto & info = a->get_info();
+      return make_tuple(to_string(info.arco_id), info.cod_aran, 
+			to_string(info.producto_id), to_string(info.insumo_id),
+			to_string(info.factor), to_string(info.cantidad),
+			to_string(info.coste));
+    });
+  auto lens = lines.foldl(make_tuple(col0.size(), col1.size(), col2.size(),
+				     col3.size(),col4.size(),col5.size(),
+				     col6.size()), [] (auto acu, auto l)
+    {
+      return make_tuple(max(get<0>(acu), get<0>(l).size()),
+			max(get<1>(acu), get<1>(l).size()),
+			max(get<2>(acu), get<2>(l).size()),
+			max(get<3>(acu), get<3>(l).size()),
+			max(get<4>(acu), get<4>(l).size()),
+			max(get<5>(acu), get<5>(l).size()),
+			max(get<6>(acu), get<6>(l).size()));
+    });
+
+  auto productor_ptr = node_ptr->get_info();
+  cout << "Node inputs reports" << endl
+       << "Rif    = " << productor_ptr->rif << endl
+       << "Nombre = " << productor_ptr->nombre << endl
+       << "Input arcs:" << endl
+       << "  " << string(get<0>(lens) - col0.size(), ' ') << col0
+       << " " << string(get<1>(lens) - col1.size(), ' ') << col1
+       << " " << string(get<2>(lens) - col2.size(), ' ') << col2
+       << " " << string(get<3>(lens) - col3.size(), ' ') << col3
+       << " " << string(get<4>(lens) - col4.size(), ' ') << col4
+       << " " << string(get<5>(lens) - col5.size(), ' ') << col5
+       << " " << string(get<6>(lens) - col6.size(), ' ') << col6 << endl;
+  lines.for_each([&lens] (auto l)
+    {
+      const string blanks0(get<0>(lens) - get<0>(l).size(), ' ');
+      const string blanks1(get<1>(lens) - get<1>(l).size(), ' ');
+      const string blanks2(get<2>(lens) - get<2>(l).size(), ' ');
+      const string blanks3(get<3>(lens) - get<3>(l).size(), ' ');
+      const string blanks4(get<4>(lens) - get<4>(l).size(), ' ');
+      const string blanks5(get<5>(lens) - get<5>(l).size(), ' ');
+      const string blanks6(get<6>(lens) - get<6>(l).size(), ' ');
+      cout << "  " << blanks0 << get<0>(l)
+	   << " " << blanks1 << get<1>(l)
+	   << " " << blanks2 << get<2>(l)
+	   << " " << blanks3 << get<3>(l)
+	   << " " << blanks4 << get<4>(l)
+	   << " " << blanks5 << get<5>(l)
+	   << " " << blanks6 << get<6>(l) << endl;
+    });
+}
+
+ExecStatus Arc::semant_mapa()
+{
+  auto res = ::semant_mapa(mapa_name);
+  if (not res.first.first)
+    return res.first;
+  
+  mapa_ptr = res.second;
+
+  return make_pair(true, "");
+}
+
+ExecStatus ArcsInput::execute()
+{
+  auto r = semant_mapa();
+  if (not r.first)
+    return r;
+
+  auto res = ::semant_int(int_exp);
+  if (not res.first.first)
+    return res.first;
+
+  id = res.second;
+
+  arc_list = mapa_ptr->net.filter_arcs([this] (auto a)
+    {
+      return a->get_info().insumo_id == id; 
+    });
+
+  report();
+
+  free();
+  return make_pair(true, "");
+}
+
+void Arc::report()
+{
+  const string col0 = "insumo_id";
+  const string col1 = "arco_id";
+  const string col2 = "nombre insumo";
+  const string col3 = "producto_id";
+
+  using Line = tuple<string, string, string, string>;
+  using Lens = tuple<size_t, size_t, size_t, size_t>;
+
+  auto lines = arc_list.map<Line>([tbl = mapa_ptr->tabla_insumos] (auto a)
+    {
+      const auto & info = a->get_info();
+      return make_tuple(to_string(info.insumo_id), to_string(info.arco_id),
+			tbl(info.insumo_id)->nombre, 
+			to_string(info.producto_id));
+    });
+
+  auto lens = lines.foldl<Lens>(make_tuple(col0.size(), col1.size(), 
+					   col2.size(), col3.size()),
+				[] (auto acu, auto l)
+    {
+      return make_tuple(max(get<0>(acu), get<0>(l).size()),
+			max(get<1>(acu), get<1>(l).size()),
+			max(get<2>(acu), get<2>(l).size()),
+			max(get<3>(acu), get<3>(l).size()));
+
+    });
+
+  cout << col0 << " " << col1 << " " << col2 << " " << col3 << endl;
+  lines.for_each([&lens] (auto l)
+    {
+      const string blanks0 = string(get<0>(lens) - get<0>(l).size(), ' ');
+      const string blanks1(get<1>(lens) - get<1>(l).size(), ' ');
+      const string blanks2(get<2>(lens) - get<2>(l).size(), ' ');
+      const string blanks3(get<3>(lens) - get<3>(l).size(), ' ');
+      cout << blanks0 << get<0>(l)
+	   << " " << blanks1 << get<1>(l)
+	   << " " << blanks2 << get<2>(l)
+	   << " " << blanks3 << get<3>(l) << endl;
+    });
 }

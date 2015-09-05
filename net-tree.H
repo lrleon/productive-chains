@@ -43,7 +43,7 @@ struct Exp : public ASTNode
 	      SEARCHPRODUCER, APPEND, LISTREAD, LISTWRITE, SEARCHPRODUCERREGEX,
 	      SEARCHPRODUCTID, SEARCHPRODUCTREGEX, SEARCHPRODUCTCOD,
 	      SEARCHPRODUCTRIF, SEARCHNODE, NODE, COVER, REACHABLE,
-	      UPSTREAM, VALID,
+	      UPSTREAM, INPUTS, ARCS,
 	      TYPEINFO, HELP, DOT, BLOCKS, ERROR } type;
 
   string type_string() const
@@ -76,7 +76,8 @@ struct Exp : public ASTNode
       case DOT: return "DOT";
       case BLOCKS: return "BLOCKS";
       case UPSTREAM: return "UPSTREAM";
-      case VALID: return "VALID";
+      case INPUTS: return "INPUTS";
+      case ARCS: return "ARCS";
       default: ERROR("Tipo de expresion invalido");
       }
     return string("INVALID");
@@ -98,14 +99,66 @@ struct ErrorExp : Exp
   void free() {}
 };
 
-// struct Valid
-// {
-//   string net_name;
-//   Net * net_ptr = nullptr;
-//   Valid(const string & name) : Exp(VALID), net_name(name) {}
-//   ExecStatus execute();
-//   void free() {}
-// };
+struct Arc : public Exp
+{
+  const string mapa_name;
+  MetaMapa * mapa_ptr = nullptr;
+  DynList<Net::Arc*> arc_list;
+  Arc(const string & name) : Exp(ARCS), mapa_name(name) {}
+  ExecStatus semant_mapa();
+  void report();
+};
+
+struct ArcsRegex : public Arc
+{
+  Exp * str_exp = nullptr;
+  string reg;
+  ArcsRegex(const string mapa_name, Exp * exp) : Arc(mapa_name), str_exp(exp) {}
+  ExecStatus execute();
+  void free() { if (str_exp->type != VAR) delete str_exp; }
+};
+
+struct ArcsInput : public Arc
+{
+  Exp * int_exp = nullptr; // expresa el insumo_id
+  long id = -1;
+  ArcsInput(const string & mapa_name, Exp * exp) 
+    : Arc(mapa_name), int_exp(exp) {}
+  ExecStatus execute();
+  void free() { if (int_exp->type != VAR) delete int_exp; }
+};
+
+struct ArcsOutput : public Arc
+{
+  Exp * int_exp = nullptr; // expresa el product_id
+  ExecStatus execute();
+  void free() { if (int_exp->type != VAR) delete int_exp; }
+};
+
+struct Arcs : public Arc
+{
+  Exp * int_exp = nullptr; // expresa el arco_id
+  ExecStatus execute();
+  void free() { if (int_exp->type != VAR) delete int_exp; }
+};
+
+struct Inputs : public Exp
+{
+  const string mapa_name;
+  const string name = "";
+  long producto_id = -1;
+  MetaMapa * mapa_ptr = nullptr;
+  MetaProducto * producto_ptr = nullptr;
+  Net::Node * node_ptr = nullptr;
+  Inputs(const string & name, const string & vname) 
+    : Exp(INPUTS), mapa_name(name), name(vname) {}
+  Inputs(const string & name, Uid id) 
+    : Exp(INPUTS), mapa_name(name), producto_id(id) {}
+  ExecStatus execute();
+  void free() {}
+  void report_product();
+  void report_node();
+};
 
 struct Dot : public Exp
 {
