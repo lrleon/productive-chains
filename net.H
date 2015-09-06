@@ -5,8 +5,7 @@
 # include <regex>
 # include <iomanip>
 # include <vector>
-# include <tpl_union.H>
-# include <tpl_test_path.H>
+# include <tpl_graph_utils.H>
 # include <grafo.H>
 # include <utils.H>
 
@@ -45,28 +44,6 @@ struct LoadNetNode
   }
 };
 
-struct LoadArc
-{
-  TablaProductores * tabla_productores_ptr = nullptr;
-  Fixed_Relation * relation_ptr = nullptr;
-
-  LoadArc() {}
-  LoadArc(TablaProductores * tbl_ptr, Fixed_Relation * ptr) 
-    : tabla_productores_ptr(tbl_ptr), relation_ptr(ptr) {}
-
-  void operator () (istream & input, Net & net, Net::Arc * a)
-  {
-    auto src = net.get_src_node(a);
-    auto tgt = net.get_tgt_node(a);
-    auto prod_src_ptr = src->get_info();
-    auto prod_tgt_ptr = tgt->get_info();
-    size_t src_idx = (*tabla_productores_ptr)(prod_src_ptr);
-    size_t tgt_idx = (*tabla_productores_ptr)(prod_tgt_ptr);
-    relation_ptr->join(src_idx, tgt_idx);
-    input >> a->get_info();
-  }
-};
-
 extern Net build_net(const GrafoSigesic & g, 
 		     const TablaProductores & tabla_productores);
 
@@ -81,8 +58,6 @@ struct MetaMapa
   mutable TablaMetaInsumos     tabla_insumos;
   mutable TablaMetaSocios      tabla_socios;
   mutable Net                  net;
-  mutable DynArray<Net::Node*> nodes;
-  mutable Fixed_Relation       relation;
   
   using Node = Net::Node;
   using Arc = Net::Arc;
@@ -97,32 +72,6 @@ struct MetaMapa
     return p1->get_info()->rif < p2->get_info()->rif;
   };
 
-  void build_relation()
-  {
-    if (::verbose)
-      cout << "    Computing network blocks ... " << endl;
-
-    const size_t & n = net.vsize();
-    nodes.reserve(n);
-    size_t i = 0;
-    net.for_each_node([&i, this] (auto p) { nodes(i++) = p; });
-    in_place_sort(nodes, cmprif);
-
-    relation.set_n(n);
-    net.for_each_arc([this] (auto a)
-      {
-	auto src = net.get_src_node(a);
-	auto tgt = net.get_tgt_node(a);
-	size_t src_idx = binary_search(nodes, src, cmprif);
-	size_t tgt_idx = binary_search(nodes, tgt, cmprif);
-	assert(src_idx < net.vsize() and tgt_idx < net.vsize());
-	relation.join(src_idx, tgt_idx);
-      });
-
-    if (::verbose)
-      cout << "    networks blocsk already computed" << endl;
-  }
-
   MetaMapa() {}
 
   MetaMapa(ifstream & in) 
@@ -136,8 +85,6 @@ struct MetaMapa
     IO_Graph<Net, LoadNetNode, SaveNetNode> io(const_cast<Net&>(net));
     io.set_load_node(l);
     io.load_in_text_mode(in);
-
-    build_relation();
 
     if (::verbose)
       cout << " all map done!" << endl 
@@ -215,12 +162,10 @@ struct MetaMapa
 
   Node * search_node(const string & rif) const noexcept
   {
-    Productor p; p.rif = rif;
-    Net::Node node; node.get_info() = &p;
-    auto ptr = bsearch(nodes, &node, cmprif);
-    if (ptr == nullptr)
-      return nullptr;
-    return *ptr;
+    return net.search_node([&rif] (auto p) 
+			   {
+			     return p->get_info()->rif == rif; 
+			   });
   }
 
   Node * search_node(const Productor & prod) const noexcept
@@ -232,7 +177,7 @@ struct MetaMapa
 			   });
   }
 
-  DynList<Node*> search_node_regex(const string & exp) const noexcept
+  DynList<Node*> search_node_regex(const string & exp) const
   {
     regex reg(exp);
     return net.filter_nodes([&reg] (auto p) 
@@ -243,13 +188,7 @@ struct MetaMapa
 
   bool reachable(Node * src, Node * tgt) const
   {
-    size_t src_idx = binary_search(nodes, src, cmprif);
-    size_t tgt_idx = binary_search(nodes, tgt, cmprif);
-    cout << "src = " << src->get_info()->rif << endl
-	 << "tgt = " << tgt->get_info()->rif << endl
-	 << "src_idx = " << src_idx << endl
-	 << "tgt_idx = " << tgt_idx << endl;
-    return relation.are_connected(src_idx, tgt_idx);
+    return test_for_path(net, src, tgt);
   }
 
 private:
@@ -322,55 +261,6 @@ private:
     return r;
   }
 
-  void 
-  upstream_first(Node * stgt,                     // Nodo de partida
-		 MetaProducto * tgt_producto_ptr, // productor de cod_aran
-		 Net & net_up,                    // red aguas arriba resultado
-		 Node * ttgt) const               // imagen de stgt en net_up
-  {
-    assert(stgt->get_info() == ttgt->get_info());
-    const auto & tgt_productor = *stgt->get_info();
-
-    if (not tgt_productor.productos.exists([tgt_producto_ptr] (auto p)
-        { return p.second  == tgt_producto_ptr->cod_aran; }))
-      {
-	cout << "Lista de productos de " << tgt_productor.rif 
-	     << " quien produce " << tgt_producto_ptr->cod_aran << endl;
-	tgt_productor.productos.for_each([] (auto p)
-          {
-	    cout << p.first << " " << p.second << endl;
-	  });
-	exit(0);
-      }
-
-    assert(tgt_productor.productos.exists([tgt_producto_ptr] (auto p)
-           { return p.second  == tgt_producto_ptr->cod_aran; }));
-
-    // Recorrer los arcos de src y visitar aquellos relacionados a inputs
-    const auto & inputs = tgt_producto_ptr->comb; // inputs de tgt_producto_ptr
-    for (auto it = net.get_in_it(stgt); it. has_curr(); it.next())
-      {
-	auto a = it.get_curr();
-	if (not inputs.exists([id = a->get_info().insumo_id] (auto c)
-			      { return id == get<0>(c); }))
-	  continue;
-
-	// a es el arco cuyo insumo_id pertenece a inputs de tgt_producto_ptr
-	
-	auto ssrc = net.get_src_node(a);
-	auto tsrc = net_up.insert_node(ssrc->get_info());
-	net_up.insert_arc(tsrc, ttgt, a->get_info());
-
-	string & cod_aran = a->get_info().cod_aran;
-	auto productor_ptr = ssrc->get_info();
- 	auto productos = inter_productor_cod_aran(productor_ptr, cod_aran);
-	auto first_prod = first_match(ssrc, productos);
-
-	if (first_prod != nullptr)
-	  upstream_first(ssrc, first_prod, net_up, tsrc);
-      }
-  }
-  
   static const long Visited = Convert_Tree;
 
   static DynList<MetaProducto*> *& productos_list(Node * p)
@@ -379,13 +269,6 @@ private:
     return (DynList<MetaProducto*>*&) NODE_COUNTER(p);
   }
 
-  static bool 
-  is_producto_in_list(Node * p, MetaProducto * producto_ptr, size_t threshold)
-  {
-    const string & name = producto_ptr->nombre;
-    return productos_list(p)->exists([name] (auto p) { return p->nombre == name; });
-  }
-  
   void 
   upstream_best(Node * stgt,                     // Nodo de partida
 		MetaProducto * tgt_producto_ptr, // productor de cod_aran
@@ -403,12 +286,8 @@ private:
     
     cout <<  "Expanding " << tgt_productor.nombre << endl
 	 << tgt_producto_ptr->nombre << " (" << tgt_producto_ptr->id << ")" 
-	 << endl;
-    productos_list(ttgt)->for_each([] (auto p)
-      {
-	cout << "    " << p->id << " " << p->nombre << endl;
-      });
-    cout << "++++++++++++++++" << endl;
+	 << endl
+	 << "++++++++++++++++" << endl;
 
     if (IS_NODE_VISITED(stgt, Visited) and 
 	productos_list(ttgt)->exists([tgt_producto_ptr] (auto p)
@@ -426,40 +305,22 @@ private:
 				    {
 				      inputs.insert(get<0>(fact), fact);
 				    });
-    cout << "Inputs for " << tgt_productor.nombre << endl;
-    inputs.for_each([] (auto p)
-    {
-      cout << p.first << " " << get<0>(p.second) << " " 
-	   << get<1>(p.second) << " " << get<2>(p.second) << endl;
-    });
-
-    cout << "Arcs for  " << tgt_productor.nombre << endl;
-    net.in_arcs(stgt).for_each([] (auto a)
-    {
-      const auto & info = a->get_info();
-      cout << info.arco_id << " " << info.cod_aran << " " << info.producto_id
-	   << " " << info.insumo_id << " " << endl;
-    });
-
-    // Recorrer los arcos de src y visitar aquellos relacionados a inputs
+    
+    const auto & producto_id = tgt_producto_ptr->id;
+        // Recorrer arcos de src y visitar aquellos relacionados a inputs
     for (auto it = net.get_in_it(stgt); 
 	 it.has_curr() and not inputs.is_empty(); it.next())
       {
 	auto a = it.get_curr();
 	const auto & info = a->get_info();
+	if (producto_id != info.producto_id)
+	  continue;
+
 	const Uid & insumo_id = info.insumo_id;
-
-	// ojo: puedo filtrar arco por producto_id
-
-	cout << "Searching insumo_id = " << insumo_id << endl;
-
 	auto p = inputs.search(insumo_id);
 	if (p == nullptr) // arco a se corresponde con algún input? 
-	  {
-	    cout << "    not found" << endl;
-	    continue;
-	  }
-	cout << "    found" << endl;
+	  continue;
+
 	inputs.remove(insumo_id);
 
 	auto ssrc = net.get_src_node(a);
@@ -482,38 +343,13 @@ private:
  	auto productos = inter_productor_cod_aran(productor_ptr, cod_aran);
 	auto dist = min_distance_match(productos, input_name, threshold);
 
-	// TODO: validar cod_aran o filtrarlo
-	
 	auto prod = get<1>(dist);
 	if (prod != nullptr)
-	  {
-	    // cout << "Expanding " << productor_ptr->nombre << " - "
-	    // 	 << prod->nombre << " (" << prod->id << ")" << endl;
-	    upstream_best(ssrc, get<1>(dist), net_up, tsrc, threshold);
-	  }
+	  upstream_best(ssrc, get<1>(dist), net_up, tsrc, threshold);
       }
-    cout << "Finished " << inputs.size() << endl;
   }
 
 public:
-
-  Net upstream_first(Node * ssrc, MetaProducto * producto_ptr) const
-  {    
-    Net ret;
-    auto tsrc = ret.insert_node(ssrc->get_info());
-    productos_list(tsrc) = new DynList<MetaProducto*>;
-    productos_list(tsrc)->append(producto_ptr);
-    
-    upstream_first(ssrc, producto_ptr, ret, tsrc);
-
-    ret.for_each_node([] (auto p) 
-		      { 
-			if (productos_list(p)) 
-			  delete productos_list(p);
-		      });
-
-    return ret;
-  }
 
   Net upstream_best(Node * ssrc, MetaProducto * producto_ptr, 
 		    size_t threshold) const
@@ -536,16 +372,6 @@ public:
 
     return ret;
   }
-
-  // {
-  //   DynList<Node*> ret;
-
-  //   return ret;
-  // }
-
-  // Net build_subcomponent(
-
-  // DynList<Node*> nodos_insumo
 };
 
 

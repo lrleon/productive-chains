@@ -211,16 +211,14 @@ public:
     return make_pair(p, producto_ptr);
   }
 
-  //                cod_aran, nombre, cantidad, coste
+  //                rif, nombre-empresa, cantidad, coste
   using Fab = tuple<string, string, double, double>;
 
   // Produce una lista filtrada de los elementos de l que tengan los
-  // rifs asociados al código arancelario de insumo_ptr
-  pair<DynList<Fab>, string> 
-  filter_cod_aran(const DynList<Fab> & l, Insumo * insumo_ptr) const
+  // rifs asociados al código arancelario cod_aran
+  DynList<Fab>
+  filter_cod_aran(const DynList<Fab> & l, const string & cod_aran) const
   {
-    const string & cod_aran = insumo_ptr->cod_aran;
-    
     DynSetTree<string> rifs; // Recorre productos asociados codigo arancelario
     auto productos = tabla_productos.por_cod_aran(cod_aran);
     for (auto it = productos.get_it(); it.has_curr(); it.next())
@@ -232,19 +230,22 @@ public:
 	rifs.append(planta_ptr->rif);
       }
 
-    auto ret = l.filter([&rifs] (auto f) { return rifs.contains(get<0>(f)); });
-    
-    return make_pair(ret, cod_aran);
+    return l.filter([&rifs] (auto f) { return rifs.contains(get<0>(f)); });
   }
 
   //                            cantidad, coste
   using SemiArco = tuple<Node*, double, double>;
 
+  // TEMPORAL
+  size_t casos_vacios = 0;
+  size_t casos_no_vacios = 0;
+  size_t casos_nacionales = 0;
   // retorna la lista de arcos y el código arancelario
   pair<DynList<SemiArco>, string> source_node(Uid insumo_id)
   {
     Insumo * insumo_ptr = tabla_insumos(insumo_id);
     assert(insumo_ptr->id == insumo_id);
+    const string & cod_aran = insumo_ptr->cod_aran;
     auto provs = tabla_proveedor_insumo(insumo_id);
     if (provs.is_empty())
       {
@@ -252,7 +253,7 @@ public:
 	s << "Insumo id " << insumo_id << " no tiene proveedores declarados "
 	  " para el año " << anho;
 	log.append(s.str());
-	return make_pair(DynList<SemiArco>(), insumo_ptr->cod_aran);
+	return make_pair(DynList<SemiArco>(), cod_aran);
       } 
 
     // recorre los proveedores de insumo y los separa en nacionales y extranj
@@ -292,18 +293,45 @@ public:
 	  }
       }
 
-    auto par = filter_cod_aran(nac_list, insumo_ptr);
-    auto nac_nodos = par.first.map<SemiArco>([this] (auto & t)
+    DynList<SemiArco> nac_nodos;
+    // if par es vacío hay que registrar al menos un nodo. se trataria
+    // de un proveedor que
+    if (not nac_list.is_empty())
       {
-	Node node(Nodo(move(get<0>(t)), move(get<1>(t))));
-	auto ptr = tabla_nodos.search(&node);
-	if (ptr != nullptr)
-	  return make_tuple(*ptr, get<2>(t), get<3>(t));
+	++casos_nacionales;
+	auto producers = filter_cod_aran(nac_list, cod_aran);
+	if (producers.is_empty())
+	  {
+	    ++casos_vacios;
+	    nac_nodos = nac_list.map<SemiArco>([this] (auto t)
+              {
+		const string & rif = get<0>(t);
+		Node node(Nodo(rif, move(get<1>(t))));
+		auto ptr = tabla_nodos.search(&node);
+		if (ptr != nullptr)
+		  return make_tuple(*ptr, get<2>(t), get<3>(t));
 
-	auto p = g.insert_node(move(node.get_info()));
-	tabla_nodos.insert(p);
-	return make_tuple(p, get<2>(t), get<3>(t));
-      });
+		auto p = g.insert_node(move(node.get_info()));
+		tabla_nodos.insert(p);
+		return make_tuple(p, get<2>(t), get<3>(t));
+	      });
+	  }
+	else 
+	  {
+	    ++casos_no_vacios;
+	    nac_nodos = producers.map<SemiArco>([this] (auto & t)
+              {
+		Node node(Nodo(move(get<0>(t)), move(get<1>(t))));
+		auto ptr = tabla_nodos.search(&node);
+		if (ptr != nullptr)
+		  return make_tuple(*ptr, get<2>(t), get<3>(t));
+
+		auto p = g.insert_node(move(node.get_info()));
+		tabla_nodos.insert(p);
+		return make_tuple(p, get<2>(t), get<3>(t));
+	      });
+	  }
+      }
 
     auto ext_nodos = ext_list.map<SemiArco>([this] (auto & t)
       {
@@ -319,7 +347,7 @@ public:
 
     nac_nodos.append(ext_nodos); // concatena ext_nodos a nac_nodos
     
-    return make_pair(nac_nodos, par.second);
+    return make_pair(nac_nodos, cod_aran);
   }
 
   void read_arcs(const char * name)
@@ -356,6 +384,18 @@ public:
 	double cantidad = atof(row(4).c_str());
 	const string & cod_aran = get<1>(lt);
 
+	if (get<0>(lt).is_empty())
+	  {
+	    stringstream s;
+	    s << "arco id " << arc_id << " " << insumo_id << "[" << cod_aran
+	      << "] " << producto_id << "sin productor de insumo";
+	    // cout << "i = " << i << " " <<  insumo_id << " [" << arc_id << "] "
+	    //  	 << producto_id << endl;
+	    log.append(s.str());
+	  }
+
+	// assert(not get<0>(lt).is_empty());
+
 	producto_ptr->comb.insert(make_tuple(insumo_id, cod_aran, 
 					     cantidad, arc_id));
 
@@ -367,6 +407,9 @@ public:
 			  cantidad, get<1>(t), get<2>(t));
 	  }
       }
+    cout << "Casos nacionales = " << casos_nacionales << endl
+	 << "Casos vacios     = " << casos_vacios << endl
+	 << "Casos no vacios  = " << casos_no_vacios << endl;
   }
   
 public:

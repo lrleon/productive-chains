@@ -80,6 +80,8 @@ COVER        [cC][oO][vV][eE][rR]
 DOT          [dD][oO][tT]
 UPSTREAM     [uU][pP][sS][tT][rR][eE][aA][mM]
 INPUTS       [iI][nN][pP][uU][tT][sS]
+OUTPUTS      [oO][uU][tT][pP][uU][tT][sS]
+ARCS         [aa][rR][cC][sS]
 
 SPACE           [ \f\r\t\v]
 
@@ -120,6 +122,8 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
 {DOT}        return DOT;
 {UPSTREAM}   return UPSTREAM;
 {INPUTS}     return INPUTS;
+{OUTPUTS}    return OUTPUTS;
+{ARCS}       return ARCS;
 
  /*
   * The single-characters tokens 

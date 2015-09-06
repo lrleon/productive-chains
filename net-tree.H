@@ -112,34 +112,40 @@ struct Arc : public Exp
 struct ArcsRegex : public Arc
 {
   Exp * str_exp = nullptr;
-  string reg;
+  string str;
   ArcsRegex(const string mapa_name, Exp * exp) : Arc(mapa_name), str_exp(exp) {}
   ExecStatus execute();
   void free() { if (str_exp->type != VAR) delete str_exp; }
 };
 
-struct ArcsInput : public Arc
+struct ArcsInt : public Arc
 {
-  Exp * int_exp = nullptr; // expresa el insumo_id
+  Exp * int_exp = nullptr; // expresa un id de insumo, producto o arc
   long id = -1;
-  ArcsInput(const string & mapa_name, Exp * exp) 
-    : Arc(mapa_name), int_exp(exp) {}
-  ExecStatus execute();
+  ArcsInt(const string & mapa_name, Exp * exp) : Arc(mapa_name), int_exp(exp) {}
+  ExecStatus semant();
   void free() { if (int_exp->type != VAR) delete int_exp; }
 };
 
-struct ArcsOutput : public Arc
+struct ArcsInput : public ArcsInt
 {
-  Exp * int_exp = nullptr; // expresa el product_id
+  ArcsInput(const string & mapa_name, Exp * exp) : ArcsInt(mapa_name, exp) {}
   ExecStatus execute();
-  void free() { if (int_exp->type != VAR) delete int_exp; }
+  void free() { ArcsInt::free(); }
 };
 
-struct Arcs : public Arc
+struct ArcsOutput : public ArcsInt
 {
-  Exp * int_exp = nullptr; // expresa el arco_id
+  ArcsOutput(const string & mapa_name, Exp * exp) : ArcsInt(mapa_name, exp) {}
   ExecStatus execute();
-  void free() { if (int_exp->type != VAR) delete int_exp; }
+  void free() { ArcsInt::free(); }
+};
+
+struct Arcs : public ArcsInt
+{
+  Arcs(const string & mapa_name, Exp * exp) : ArcsInt(mapa_name, exp) {}
+  ExecStatus execute();
+  void free() { ArcsInt::free(); }
 };
 
 struct Inputs : public Exp
@@ -358,7 +364,6 @@ struct UpstreamF : public SubNet
   UpstreamF(const string & mapa_name, const string & node_name, Exp * prod_exp) 
     : SubNet(UPSTREAM, mapa_name, node_name), product_exp(prod_exp) {}
   ExecStatus semant();
-  ExecStatus execute();
   void free() { if (product_exp->type != VAR) delete product_exp; }
 };
 
@@ -405,14 +410,13 @@ struct VarMap : public Var
   string info() const 
   {
     stringstream s;
-    auto num_blks = value.relation.get_num_blocks();
     s << "Map var:" << endl
       << "    " << value.tabla_productores.size() << " producers" << endl
       << "    " << value.tabla_productos.size() << " products" << endl
+      << "    " << value.tabla_insumos.size() << " inputs" << endl
+      << "    " << value.tabla_socios.size() << " stakeholders" << endl
       << "    " << value.net.vsize() << " nodes" << endl
-      << "    " << value.net.esize() << " arcs" << endl
-      << "    " << num_blks << " blocks" << endl
-      << "    " << 100.0*num_blks/value.net.vsize() << " % frag" << endl;
+      << "    " << value.net.esize() << " arcs" << endl;
     return s.str();
   }
   string type_info() const { return info(); }

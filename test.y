@@ -2,7 +2,8 @@
 
 # define YYDEBUG 0
 
-# include <iostream>  
+# include <iostream>
+# include <tpl_graph_utils.H>
 # include <tpl_components.H>
 # include <generate_graph.H>
 # include <net-tree.H>
@@ -33,7 +34,7 @@
 
 %token LOAD SAVE EXIT ERROR INFO LS RM SEARCH PRODUCER PRODUCERS LIST APPEND
 %token PRODUCT ID REGEX HELP COD TYPEINFO RIF NODE REACHABLE COVER DOT UPSTREAM
-%token INPUTS
+%token INPUTS ARCS OUTPUTS
 %token <symbol> STRCONST INTCONST VARNAME 
 
 %type <expr> exp
@@ -90,7 +91,15 @@ cmd_unit: EXIT
         | REACHABLE VARNAME ref_exp ref_exp { $$ = new Connected($2, $3, $4); }
         | DOT VARNAME ref_exp { $$ = new Dot($2, $3); }
         | INPUTS VARNAME VARNAME { $$ = new Inputs($2, $3); }
-        | INPUTS VARNAME INTCONST { $$ = new Inputs($2, $3); }
+        | INPUTS VARNAME INTCONST 
+	  {
+	    auto id = atol(id_table($3));
+	    $$ = new Inputs($2, id); 
+	  }
+        | ARCS INPUTS VARNAME ref_exp { $$ = new ArcsInput($3, $4); }
+        | ARCS OUTPUTS VARNAME ref_exp { $$ = new ArcsOutput($3, $4); }
+        | ARCS REGEX VARNAME ref_exp { $$ = new ArcsRegex($3, $4); }
+        | ARCS VARNAME ref_exp { $$ = new Arcs($2, $3); }
 ;
 
 help_exp: HELP           { $$ = new Help; }
@@ -205,10 +214,6 @@ exp : LOAD ref_exp
     | COVER VARNAME VARNAME
       {
 	$$ = new Cover($2, $3);
-      }
-    | UPSTREAM VARNAME VARNAME ref_exp
-      {
-	$$ = new UpstreamF($2, $3, $4);
       }
     | UPSTREAM VARNAME VARNAME ref_exp ref_exp
       {
@@ -1503,19 +1508,6 @@ ExecStatus UpstreamF::semant()
   return make_pair(true, "");
 }
 
-ExecStatus UpstreamF::execute()
-{
-  auto r = semant();
-  if (not r.first)
-    return r;
-
-  cout << "Building upstream net from " << *src->get_info() << endl;
-  net = mapa_ptr->upstream_first(src, producto_ptr);
-  cout << "done!";
-  free();
-  return make_pair(true, "");
-}
-
 ExecStatus UpstreamB::execute()
 {
   auto r = semant();
@@ -1730,7 +1722,6 @@ void Inputs::report_node()
   assert(node_ptr);
 
   using Line = tuple<string, string, string, string, string, string, string>;
-  using Lens = tuple<size_t, size_t, size_t, size_t, size_t, size_t, size_t>;
   
   const string col0 = "arco_id";
   const string col1 = "cod_aran";
@@ -1803,7 +1794,7 @@ ExecStatus Arc::semant_mapa()
   return make_pair(true, "");
 }
 
-ExecStatus ArcsInput::execute()
+ExecStatus ArcsInt::semant()
 {
   auto r = semant_mapa();
   if (not r.first)
@@ -1815,6 +1806,17 @@ ExecStatus ArcsInput::execute()
 
   id = res.second;
 
+  free();
+  return make_pair(true, "");
+}
+
+ExecStatus ArcsInput::execute()
+{
+  auto r = semant();
+  if (not r.first)
+    return r;
+
+  cout << "Searching arcs whose insumo_id == " << id << endl;
   arc_list = mapa_ptr->net.filter_arcs([this] (auto a)
     {
       return a->get_info().insumo_id == id; 
@@ -1822,49 +1824,127 @@ ExecStatus ArcsInput::execute()
 
   report();
 
-  free();
   return make_pair(true, "");
+}
+
+ExecStatus Arcs::execute()
+{
+  auto r = semant();
+  if (not r.first)
+    return r;
+
+  cout << "Searching arc whose arco_id == " << id << endl;
+  arc_list = mapa_ptr->net.filter_arcs([this] (auto a)
+    {
+      return a->get_info().arco_id == id; 
+    });
+
+  report();
+
+  return make_pair(true, "");
+}
+
+ExecStatus ArcsOutput::execute()
+{
+  auto r = semant();
+  if (not r.first)
+    return r;
+
+  cout << "Searching arc whose producto_id == " << id << endl;
+  arc_list = mapa_ptr->net.filter_arcs([this] (auto a)
+    {
+      return a->get_info().producto_id == id; 
+    });
+
+  report();
+
+  return make_pair(true, "");
+}
+
+ExecStatus ArcsRegex::execute()
+{
+  auto res = semant_mapa();
+  if (not res.first)
+    return res;
+
+  auto r = ::semant_string(str_exp);
+  if (not r.first.first)
+    return r.first;
+
+  str = r.second;
+  try
+    {
+      regex reg(str);
+      arc_list = 
+	mapa_ptr->net.filter_arcs([&reg, tbl = mapa_ptr->tabla_insumos] (auto a)
+          {
+	    return regex_search(tbl(a->get_info().insumo_id)->nombre, reg);
+	  });
+      free();
+      return make_pair(true, "");
+    }
+  catch (regex_error & e)
+    {
+      return make_pair(false, e.what());
+    }
 }
 
 void Arc::report()
 {
-  const string col0 = "insumo_id";
-  const string col1 = "arco_id";
-  const string col2 = "nombre insumo";
-  const string col3 = "producto_id";
+  const string col0 = "rif";
+  const string col1 = "ins_id";
+  const string col2 = "arco_id";
+  const string col3 = "nombre-insumo";
+  const string col4 = "prod_id";
+  const string col5 = "rif";
 
-  using Line = tuple<string, string, string, string>;
-  using Lens = tuple<size_t, size_t, size_t, size_t>;
+  using Line = tuple<string,string,string,string,string,string>;
 
-  auto lines = arc_list.map<Line>([tbl = mapa_ptr->tabla_insumos] (auto a)
+  auto lines = arc_list.map<Line>([this, tbl = mapa_ptr->tabla_insumos] (auto a)
     {
+      auto src = mapa_ptr->net.get_src_node(a);
+      auto tgt = mapa_ptr->net.get_tgt_node(a);
+      auto prod_src = src->get_info();
+      auto prod_tgt = tgt->get_info();
       const auto & info = a->get_info();
-      return make_tuple(to_string(info.insumo_id), to_string(info.arco_id),
+      return make_tuple(prod_src->rif,
+			to_string(info.insumo_id), to_string(info.arco_id),
 			tbl(info.insumo_id)->nombre, 
-			to_string(info.producto_id));
+			to_string(info.producto_id), prod_tgt->rif);
     });
 
-  auto lens = lines.foldl<Lens>(make_tuple(col0.size(), col1.size(), 
-					   col2.size(), col3.size()),
-				[] (auto acu, auto l)
+  auto lens = lines.foldl(make_tuple(col0.size(), col1.size(), 
+				     col2.size(), col3.size(),
+				     col4.size(), col5.size()),
+			  [] (auto acu, auto l)
     {
       return make_tuple(max(get<0>(acu), get<0>(l).size()),
 			max(get<1>(acu), get<1>(l).size()),
 			max(get<2>(acu), get<2>(l).size()),
-			max(get<3>(acu), get<3>(l).size()));
-
+			max(get<3>(acu), get<3>(l).size()),
+			max(get<4>(acu), get<4>(l).size()),
+			max(get<4>(acu), get<5>(l).size()));
     });
 
-  cout << col0 << " " << col1 << " " << col2 << " " << col3 << endl;
+  cout << string(get<0>(lens) - col0.size(), ' ') << col0 << " ["
+       << string(get<1>(lens) - col1.size(), ' ') << col1 
+       << " " << string(get<2>(lens) - col2.size(), ' ') << col2 
+       << " " << string(get<3>(lens) - col3.size(), ' ') << col3
+       << " " << string(get<4>(lens) - col4.size(), ' ') << col4 << "]" 
+       << " " << string(get<5>(lens) - col5.size(), ' ') << col5 << endl;
   lines.for_each([&lens] (auto l)
     {
-      const string blanks0 = string(get<0>(lens) - get<0>(l).size(), ' ');
+      const string blanks0(get<0>(lens) - get<0>(l).size(), ' ');
       const string blanks1(get<1>(lens) - get<1>(l).size(), ' ');
       const string blanks2(get<2>(lens) - get<2>(l).size(), ' ');
       const string blanks3(get<3>(lens) - get<3>(l).size(), ' ');
+      const string blanks4(get<4>(lens) - get<4>(l).size(), ' ');
+      const string blanks5(get<5>(lens) - get<5>(l).size(), ' ');
       cout << blanks0 << get<0>(l)
-	   << " " << blanks1 << get<1>(l)
+	   << " [" << blanks1 << get<1>(l)
 	   << " " << blanks2 << get<2>(l)
-	   << " " << blanks3 << get<3>(l) << endl;
+	   << " " << blanks3 << get<3>(l) 
+	   << " " << blanks4 << get<4>(l) 
+	   << "] " << blanks5 << get<5>(l) << endl;
     });
 }

@@ -529,9 +529,9 @@ struct TablaProveedorInsumo : public DynArray<ProveedorInsumo>
 	  throw domain_error(fmt("number of fields of row %d is not %d",
 				 row.size(), n));
 
-	long year = atol(row(4).c_str());
-	if (year != anho)
-	  continue;
+	// long year = atol(row(4).c_str());
+	// if (year != anho)
+	//   continue;
 	heap.emplace(atol(row(0).c_str()), atol(row[1].c_str()),
 		     atol(row(2).c_str()), atof(row(3).c_str()), 
 		     atof(row(5).c_str()));
@@ -540,6 +540,7 @@ struct TablaProveedorInsumo : public DynArray<ProveedorInsumo>
     this->reserve(heap.size());
     for (size_t i = 0; not heap.is_empty(); ++i)
       this->access(i) = move(heap.getMin());
+
     if (::verbose)
       cout << "Done!" << endl
 	   << endl;
@@ -661,7 +662,7 @@ struct Productor
   string rif;
   string nombre;
   //    insumo_id, cod_aran
-  DynMapTree<Uid, string> productos; // productos que fabrica y/o vende
+  DynMapTree<Uid, string> productos; // productos que fabrica 
 
       // Lista de socios accionistas. Cada par es rif accionista y %
   DynList<pair<string, float>> socios; 

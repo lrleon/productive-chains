@@ -116,6 +116,9 @@ void process_comand_line(int argc, char *argv[])
     if (gout.fail())
       throw domain_error(fmt("No puedo crear %s", gname.getValue().c_str()));
     mapa.save(gout);
+
+    ofstream log("log.txt");
+    mapa.log.for_each([&log] (auto s) { log << s << endl; } );
   }
 
   ofstream productores_out(Pname.getValue());
@@ -143,8 +146,7 @@ void process_comand_line(int argc, char *argv[])
   if (insumos_out.fail())
     throw domain_error(fmt("No puedo crear %s", iname.getValue().c_str()));
   TablaMetaInsumos tabla_insumos(mapa.tabla_insumos);
-  tabla_insumos.save(insumos_out);
-
+  tabla_insumos.save(insumos_out);  
 }
 
 
