@@ -959,7 +959,6 @@ struct MetaInsumo
   {
     out << id << endl
 	<< nombre << endl;
-    // cout << id << " " << nombre << endl;
   }
 
   void load(istream & in)
@@ -967,7 +966,6 @@ struct MetaInsumo
     in >> id;
     in.ignore();
     getline(in, nombre);
-    // cout << id << " " << nombre << endl;
   }
 };
 

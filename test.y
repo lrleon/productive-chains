@@ -82,7 +82,7 @@ cmd_unit: EXIT
         | TYPEINFO VARNAME '[' ref_exp ']' { $$ = new TypeInfo($2, $4); }
         | VARNAME '=' exp                  { $$ = new Assign($1, $3); }
         | VARNAME '[' ref_exp ']' '=' exp  { $$ = new ListWrite($1, $3, $6); }
-        | SAVE ref_exp ref_exp             { }
+        | SAVE VARNAME VARNAME ref_exp     { $$ = new Save($2, $3, $4); }
         | LS                               { $$ = new Ls(); }
         | RM rm_list                       { $$ = $2; }
         | APPEND VARNAME item_list { $$ = new Append($2, $3); delete $3; }
@@ -303,11 +303,6 @@ ExecStatus Load::execute()
   return make_pair(true, "");
 }
 
-ExecStatus Save::execute()
-{
-  return ExecStatus();
-}
-
 ExecStatus Assign::execute()
 {
   auto result = right_side->execute();
@@ -502,7 +497,7 @@ ExecStatus Assign::execute()
 	auto var = left_side->get_value_ptr();
 	if (var == nullptr)
 	  {
-	    var = new VarCover;
+	    var = new VarNet;
 	    left_side->set_value_ptr(var);
 	  }
 	else
@@ -511,9 +506,9 @@ ExecStatus Assign::execute()
 	    goto again_cover;
 	  }
 	auto cover_exp = static_cast<Cover*>(right_side);
-	auto varcover = static_cast<VarCover*>(var);
-	varcover->mapa_ptr = cover_exp->mapa_ptr;
-	varcover->net = move(cover_exp->net);
+	auto varnet = static_cast<VarNet*>(var);
+	varnet->mapa_ptr = cover_exp->mapa_ptr;
+	varnet->net = move(cover_exp->net);
 	delete right_side;
 	return make_pair(true, "");
 	break;
@@ -1559,24 +1554,33 @@ ExecStatus UpstreamB::execute()
   return make_pair(true, "");
 }
 
-ExecStatus Dot::execute()
+static pair<ExecStatus, VarNet*> semant_net(const string & net_name)
 {
   stringstream s;
   auto varname = var_tbl(net_name);
   if (varname == nullptr)
     {
       s << "Var net " << net_name << " not found";
-      return make_pair(false, s.str());
+      return make_pair(make_pair(false, s.str()), nullptr);
     }
 
-  auto varcover = static_cast<VarCover*>(varname->get_value_ptr());
-  if (varcover->var_type != Var::VarType::Cover)
+  auto varnet = static_cast<VarNet*>(varname->get_value_ptr());
+  if (varnet->var_type != Var::VarType::Cover)
     {
       s << "Var " << net_name << " is not a net type";
-      return make_pair(false, s.str());
+      return make_pair(make_pair(false, s.str()), nullptr);
     }
 
-  net_ptr = &varcover->net;
+  return make_pair(make_pair(true, ""), varnet);
+}
+
+ExecStatus Dot::execute()
+{
+  auto r = semant_net(net_name);
+  if (not r.first.first)
+    return r.first;
+
+  varnet = r.second;
 
   auto res = ::semant_string(file_exp);
   if (not res.first.first)
@@ -1587,13 +1591,13 @@ ExecStatus Dot::execute()
   ofstream out(file_name);
   if (out.fail())
     {
+      stringstream s;
       s << "cannot create file " << file_name;
       return make_pair(false, s.str());
     }
 
-  Write_Arc warc(varcover->mapa_ptr->tabla_insumos);
-
-  To_Graphviz<Net, Write_Node, Write_Arc>().digraph(*net_ptr, out, 
+  Write_Arc warc(varnet->mapa_ptr->tabla_insumos);
+  To_Graphviz<Net, Write_Node, Write_Arc>().digraph(varnet->net, out, 
 						    Write_Node(), warc);
 
   free();
@@ -1947,4 +1951,45 @@ void Arc::report()
 	   << " " << blanks4 << get<4>(l) 
 	   << "] " << blanks5 << get<5>(l) << endl;
     });
+}
+
+ExecStatus Save::execute()
+{
+  auto p = ::semant_mapa(mapa_name);
+  if (not p.first.first)
+    return p.first;
+
+  mapa_ptr = p.second;
+
+  auto n = semant_net(net_name);
+  if (not n.first.first)
+    return n.first;
+
+  stringstream s;
+  auto varnet = n.second;
+  if (varnet->mapa_ptr != mapa_ptr)
+    {
+      s << "Var net " << net_name << " is not associated to map " << mapa_name;
+      return make_pair(false, s.str());
+    }
+
+  auto r = semant_string(str_exp);
+  if (not r.first.first)
+    return r.first;
+
+  const string & file_name = r.second;
+
+  ofstream out(file_name);
+  if (out.fail())
+    {
+      s << "cannot create file " << file_name;
+      return make_pair(false, s.str());
+    }
+
+  cout << "Saving net " << net_name << " to " << file_name << "..." << endl;
+  mapa_ptr->save(varnet->net, out);
+  cout << "done!" << endl;
+
+  free();
+  return make_pair(true, "");
 }

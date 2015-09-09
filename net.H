@@ -53,11 +53,12 @@ extern void save_net(const Net & net,
 
 struct MetaMapa
 {
-  mutable TablaProductores     tabla_productores;
-  mutable TablaMetaProductos   tabla_productos;
-  mutable TablaMetaInsumos     tabla_insumos;
-  mutable TablaMetaSocios      tabla_socios;
-  mutable Net                  net;
+  TablaProductores   tabla_productores;
+  TablaMetaProductos tabla_productos;
+  TablaMetaInsumos   tabla_insumos;
+  TablaMetaSocios    tabla_socios;
+  Net                net;
+  // DynSetTree<string> var_names; // TODO: 
   
   using Node = Net::Node;
   using Arc = Net::Arc;
@@ -91,20 +92,148 @@ struct MetaMapa
 	   << endl;
   }
 
+  // ~MetaMapa()
+  // {
+  //   if (::verbose)
+  //     cout << "Warning: other variables bounded to a deleted map var could"
+  // 	   << "become inconsistent" << endl
+  // 	   << "It is recommended to logout in order to clean the internal state"
+  // 	   << endl
+  // 	   << "Concretely if you have deleted a map var because you saved" 
+  // 	   << endl
+  // 	   << "a sub net in another map var" << endl;
+  // }
+
   void save(ostream & out) const
   {
     tabla_productores.save(out);
     tabla_productos.save(out);
+    tabla_insumos.save(out);
+    tabla_socios.save(out);
     save_net(net, tabla_productores, out);
+  }
+
+  MetaMapa compress(const Net & subnet) const
+  {
+    MetaMapa ret;
+    
+    if (::verbose)
+      cout << "Copying producers ... " << endl;
+
+    {
+      DynSetTree<string> socios;
+      DynSetTree<Uid> productos;
+
+      for (auto it = subnet.get_node_it(); it.has_curr(); it.next()) 
+	{
+	  auto & productor = *it.get_curr()->get_info();
+	  ret.tabla_productores.append(productor);
+	  productor.productos.for_each([&productos] (const auto & prod)
+				       {
+					 productos.append(prod.first);
+				       });
+	  productor.socios.for_each([&socios] (const auto & s)
+				    {
+				      socios.append(s.first);
+				    });
+	}
+
+      if (::verbose)
+	cout << "Building skateholder table ..." << endl
+	     << endl;
+      
+      ret.tabla_socios.reserve(socios.size());
+      size_t i = 0;
+      socios.for_each([&ret, this, &i] (auto id)
+        {
+	  ret.tabla_socios.access(i++) = *tabla_socios(id);
+	});
+
+      if (::verbose)
+	cout << "done!" << endl
+	     << socios.size() << " skateholders" << endl
+	     << endl
+	     << "Building products table ..."<< endl;
+
+      ret.tabla_productos.reserve(productos.size());
+      i = 0;
+      productos.for_each([&ret, this, &i] (auto id)
+        {
+	  ret.tabla_productos.access(i++) = *tabla_productos(id);
+	});
+
+      if (::verbose)
+	cout << "done!" << endl
+	     << productos.size() << " products" << endl
+	     << endl;
+    }
+
+    if (::verbose)
+      cout << "done producers copy!" << endl
+	   << ret.tabla_productores.size() << " producers" << endl
+	   << endl
+	   << "Sorting producer before net copy copy ..." << endl;
+
+    in_place_sort(ret.tabla_productores);
+
+    if (::verbose)
+      cout << "done!" << endl
+	   << ret.tabla_productores.size() << " producers" << endl
+	   << endl
+	   << "Creating net nodes ..." << endl;
+
+    DynMapTree<string, Node*> nodes; // producto_id --> Node*
+    for (auto it = ret.tabla_productores.get_it(); it.has_curr(); it.next())
+      {
+	auto & productor = it.get_curr();
+	auto ptr = ret.net.insert_node(&productor);
+	nodes.insert(productor.rif, ptr);
+      }
+    
+    if (::verbose)
+      cout << "done!" << endl
+	   << nodes.size() << " nodes" << endl
+	   << endl
+	   << "Creating arcs ..." << endl;
+
+    DynSetTree<Uid> insumos; // los insumos cuando se hagan los arcos
+
+    for (auto it = subnet.get_arc_it(); it.has_curr(); it.next())
+      {
+	auto a = it.get_curr();
+	const auto & info = a->get_info();
+	auto ssrc = subnet.get_src_node(a);
+	auto stgt = subnet.get_tgt_node(a);
+	auto tsrc = nodes.find(ssrc->get_info()->rif);
+	auto ttgt = nodes.find(stgt->get_info()->rif);
+	ret.net.insert_arc(tsrc, ttgt, info);
+	insumos.append(info.insumo_id);
+      }
+
+    if (::verbose)
+      cout << "done"
+	   << ret.net.esize() << " arcs" << endl
+	   << endl
+	   << "Building inputs table ..." << endl;
+
+    size_t i = 0;
+    ret.tabla_insumos.reserve(insumos.size());
+    insumos.for_each([&ret, this, &i] (auto id) 
+      {
+	ret.tabla_insumos.access(i++) = *tabla_insumos(id);
+      });
+
+    if (::verbose)
+      cout << "done!" << endl
+	   << insumos.size() << insumos.size() << endl
+	   << endl;
+
+    return ret;
   }
 
   void save(const Net & subnet, ostream & out) const
   {
-    // mutable TablaProductores     tabla_productores;
-  // mutable TablaMetaProductos   tabla_productos;
-  // mutable TablaMetaInsumos     tabla_insumos;
-  // mutable TablaMetaSocios      tabla_socios;
-  // mutable Net                  net;
+    compress(subnet).save(out);    
   }
 
   void autotest() const
@@ -215,30 +344,6 @@ private:
       });
 
     return ret;
-  }
-
-  /* 
-     Retorna el primer producto encontrado cuya combinación linea quepa
-     enteramente en el conjunto de arcos de entrada de tgt 
-  */
-  MetaProducto * first_match(Node * tgt, 
-			     const DynList<MetaProducto*> & productos) const
-  {
-    // Códigos arancelarios de todos los arcos entrantes a tgt
-    DynSetHash<string> arc_codes;
-    for (auto it = net.get_in_it(tgt); it.has_curr(); it.next())
-      arc_codes.append(it.get_curr()->get_info().cod_aran);
-
-    for (auto it = productos.get_it(); it.has_curr(); it.next())
-      {
-	auto producto_ptr = it.get_curr();
-	if (producto_ptr->comb.all([&arc_codes] (auto p)
-				   { 
-				     return arc_codes.has(get<1>(p));
-				   }))
-	  return producto_ptr;
-      }
-    return nullptr;
   }
 
   using Dist = tuple<size_t, MetaProducto*>;

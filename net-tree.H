@@ -43,7 +43,7 @@ struct Exp : public ASTNode
 	      SEARCHPRODUCER, APPEND, LISTREAD, LISTWRITE, SEARCHPRODUCERREGEX,
 	      SEARCHPRODUCTID, SEARCHPRODUCTREGEX, SEARCHPRODUCTCOD,
 	      SEARCHPRODUCTRIF, SEARCHNODE, NODE, COVER, REACHABLE,
-	      UPSTREAM, INPUTS, ARCS,
+	      UPSTREAM, INPUTS, ARCS, SAVE,
 	      TYPEINFO, HELP, DOT, BLOCKS, ERROR } type;
 
   string type_string() const
@@ -78,6 +78,7 @@ struct Exp : public ASTNode
       case UPSTREAM: return "UPSTREAM";
       case INPUTS: return "INPUTS";
       case ARCS: return "ARCS";
+      case SAVE: return "SAVE";
       default: ERROR("Tipo de expresion invalido");
       }
     return string("INVALID");
@@ -164,18 +165,6 @@ struct Inputs : public Exp
   void free() {}
   void report_product();
   void report_node();
-};
-
-struct Dot : public Exp
-{
-  const string net_name;
-  Exp * file_exp = nullptr;
-  Net * net_ptr  = nullptr;
-  string file_name;
-  Dot(const string & name, Exp * str_exp) 
-    : Exp(DOT), net_name(name), file_exp(str_exp) {}
-  ExecStatus execute();
-  void free() { if (file_exp->type != Exp::Type::VAR) delete file_exp; }
 };
 
 struct StringExp : public Exp
@@ -422,15 +411,15 @@ struct VarMap : public Var
   string type_info() const { return info(); }
 };
 
-struct VarCover : public Var
+struct VarNet : public Var
 {
   MetaMapa * mapa_ptr = nullptr;
   Net        net;
-  VarCover() : Var(Cover) {}
-  VarCover * clone() const { return new VarCover; }
+  VarNet() : Var(Cover) {}
+  VarNet * clone() const { return new VarNet; }
   void copy(Var * src) 
   {
-    auto s = static_cast<VarCover*>(src);
+    auto s = static_cast<VarNet*>(src);
     mapa_ptr = s->mapa_ptr;
     net      = s->net;
   }
@@ -745,14 +734,30 @@ struct Assign : public Exp
   void free() { delete right_side; }
 };
 
-struct Save : public ASTNode
+struct Dot : public Exp
 {
-  char * file_name;
+  const string net_name;
+  Exp * file_exp = nullptr;
+  VarNet * varnet  = nullptr;
+  string file_name;
+  Dot(const string & name, Exp * str_exp) 
+    : Exp(DOT), net_name(name), file_exp(str_exp) {}
+  ExecStatus execute();
+  void free() { if (file_exp->type != Exp::Type::VAR) delete file_exp; }
+};
 
-  Save(const MetaMapa & mapa, char * name) : file_name(name) {}
+struct Save : public Exp
+{
+  const string mapa_name;
+  const string net_name;
+  Exp * str_exp = nullptr;
+  MetaMapa * mapa_ptr = nullptr;
+  
+  Save(const string & mname, const string & nname, Exp * exp)
+    : Exp(SAVE), mapa_name(mname), net_name(nname), str_exp(exp) {}
 
   ExecStatus execute();
-  void error() {}
+  void free() { if (str_exp->type != VAR) delete str_exp; }
 };
 
 
