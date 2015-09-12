@@ -1,5 +1,6 @@
 %{
 
+// for testing
 # define YYDEBUG 0
 
 # include <iostream>
