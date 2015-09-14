@@ -81,7 +81,11 @@ DOT          [dD][oO][tT]
 UPSTREAM     [uU][pP][sS][tT][rR][eE][aA][mM]
 INPUTS       [iI][nN][pP][uU][tT][sS]
 OUTPUTS      [oO][uU][tT][pP][uU][tT][sS]
+INPUT        [iI][nN][pP][uU][tT]
+OUTPUT       [oO][uU][tT][pP][uU][tT]
 ARCS         [aa][rR][cC][sS]
+PATH         [pP][aA][tT][hH]
+RANKS        [rR][aA][nN][kK][sS]
 
 SPACE           [ \f\r\t\v]
 
@@ -121,9 +125,13 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
 {COVER}      return COVER;
 {DOT}        return DOT;
 {UPSTREAM}   return UPSTREAM;
+{INPUT}      return INPUT;
+{OUTPUT}     return OUTPUT;
 {INPUTS}     return INPUTS;
 {OUTPUTS}    return OUTPUTS;
 {ARCS}       return ARCS;
+{PATH}       return PATH;
+{RANKS}      return RANKS;
 
  /*
   * The single-characters tokens 

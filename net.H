@@ -374,9 +374,9 @@ private:
     return (DynList<MetaProducto*>*&) NODE_COUNTER(p);
   }
 
-  void 
+  bool
   upstream_best(Node * stgt,                     // Nodo de partida
-		MetaProducto * tgt_producto_ptr, // productor de cod_aran
+		MetaProducto * tgt_producto_ptr, // producto asociado a stgt
 		Net & net_up,                    // red aguas arriba resultado
 		Node * ttgt,                     // imagen de stgt en net_up
 		size_t threshold) const          // tolerancia en string dist
@@ -389,18 +389,18 @@ private:
     assert(tgt_productor.productos.exists([tgt_producto_ptr] (auto p)
            { return p.second  == tgt_producto_ptr->cod_aran; }));
     
-    cout <<  "Expanding " << tgt_productor.nombre << endl
+    cout << "++++" << endl
+	 << "Expanding " << tgt_productor.nombre << endl
 	 << tgt_producto_ptr->nombre << " (" << tgt_producto_ptr->id << ")" 
-	 << endl
-	 << "++++++++++++++++" << endl;
+	 << endl;
 
     if (IS_NODE_VISITED(stgt, Visited) and 
 	productos_list(ttgt)->exists([tgt_producto_ptr] (auto p)
 				     { return tgt_producto_ptr == p; }))
       {
-	cout << "Warning: cycle detected at node " << tgt_productor.rif
+	cout << "WARNING: cycle detected at node " << tgt_productor.rif
 	     << " " << tgt_productor.nombre << endl;
-	return;
+	return false;
       }
     NODE_BITS(stgt).set_bit(Visited, true);
     productos_list(ttgt)->append(tgt_producto_ptr);
@@ -411,14 +411,14 @@ private:
 				      inputs.insert(get<0>(fact), fact);
 				    });
     
-    const auto & producto_id = tgt_producto_ptr->id;
+    const auto & tgt_producto_id = tgt_producto_ptr->id;
         // Recorrer arcos de src y visitar aquellos relacionados a inputs
     for (auto it = net.get_in_it(stgt); 
 	 it.has_curr() and not inputs.is_empty(); it.next())
       {
 	auto a = it.get_curr();
 	const auto & info = a->get_info();
-	if (producto_id != info.producto_id)
+	if (tgt_producto_id != info.producto_id)
 	  continue;
 
 	const Uid & insumo_id = info.insumo_id;
@@ -429,7 +429,7 @@ private:
 	inputs.remove(insumo_id);
 
 	auto ssrc = net.get_src_node(a);
-	auto productor_ptr = ssrc->get_info();
+	auto src_productor_ptr = ssrc->get_info();
 	
 	Node * tsrc = nullptr;
 	if (NODE_COOKIE(ssrc))
@@ -441,17 +441,24 @@ private:
 	    productos_list(tsrc) = new DynList<MetaProducto*>;
 	  }
 	assert(productos_list(tsrc));
-	net_up.insert_arc(tsrc, ttgt, a->get_info());
+	// net_up.insert_arc(tsrc, ttgt, a->get_info());
+
+	// ERROR? si se retorna desde ssrc ==> hay que eliminar este arco
 
 	const string & cod_aran = info.cod_aran;
 	const auto & input_name = tabla_insumos(insumo_id)->nombre;
- 	auto productos = inter_productor_cod_aran(productor_ptr, cod_aran);
+ 	auto productos = inter_productor_cod_aran(src_productor_ptr, cod_aran);
 	auto dist = min_distance_match(productos, input_name, threshold);
 
-	auto prod = get<1>(dist);
-	if (prod != nullptr)
-	  upstream_best(ssrc, get<1>(dist), net_up, tsrc, threshold);
+	auto src_producto = get<1>(dist);
+	if (src_producto != nullptr)
+	  if (upstream_best(ssrc, src_producto, net_up, tsrc, threshold))
+	    net_up.insert_arc(tsrc, ttgt, a->get_info());
+
+	// no mete el arco porque no se consigue uno con
+	// min_distance_match. Ver como hacer pero debe haber error
       }
+    return true;
   }
 
 public:

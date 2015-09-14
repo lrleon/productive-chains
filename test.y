@@ -1,12 +1,13 @@
 %{
 
-// for testing
 # define YYDEBUG 0
 
 # include <iostream>
 # include <tpl_graph_utils.H>
 # include <tpl_components.H>
 # include <generate_graph.H>
+# include <tpl_find_path.H>
+# include <topological_sort.H>
 # include <net-tree.H>
 # include <net-symtbl.H>
 
@@ -35,7 +36,7 @@
 
 %token LOAD SAVE EXIT ERROR INFO LS RM SEARCH PRODUCER PRODUCERS LIST APPEND
 %token PRODUCT ID REGEX HELP COD TYPEINFO RIF NODE REACHABLE COVER DOT UPSTREAM
-%token INPUTS ARCS OUTPUTS
+%token INPUTS ARCS OUTPUTS PATH INPUT OUTPUT RANKS
 %token <symbol> STRCONST INTCONST VARNAME 
 
 %type <expr> exp
@@ -97,10 +98,19 @@ cmd_unit: EXIT
 	    auto id = atol(id_table($3));
 	    $$ = new Inputs($2, id); 
 	  }
-        | ARCS INPUTS VARNAME ref_exp { $$ = new ArcsInput($3, $4); }
-        | ARCS OUTPUTS VARNAME ref_exp { $$ = new ArcsOutput($3, $4); }
+        | ARCS INPUT ID VARNAME ref_exp { $$ = new ArcsInputId($4, $5); }
+        | ARCS OUTPUT ID VARNAME ref_exp { $$ = new ArcsOutputId($4, $5); }
         | ARCS REGEX VARNAME ref_exp { $$ = new ArcsRegex($3, $4); }
         | ARCS VARNAME ref_exp { $$ = new Arcs($2, $3); }
+        | ARCS INPUT VARNAME ref_exp ref_exp
+	  {
+	    $$ = new ArcsInputP($3, $4, $5); 
+	  }
+        | ARCS OUTPUT VARNAME ref_exp ref_exp
+	  {
+	    $$ = new ArcsOutputP($3,$4,$5); 
+	  }
+        | PATH VARNAME ref_exp ref_exp { $$ = new ComputePath($2, $3, $4); }
 ;
 
 help_exp: HELP           { $$ = new Help; }
@@ -112,6 +122,7 @@ help_exp: HELP           { $$ = new Help; }
         | HELP COVER     { $$ = new Help(Exp::Type::COVER); }
         | HELP UPSTREAM  { $$ = new Help(Exp::Type::UPSTREAM); }
         | HELP INPUTS    { $$ = new Help(Exp::Type::INPUTS); }
+        | HELP PATH      { $$  = new Help(Exp::Type::PATH); }
 ;
 
 item_list: ref_exp 
@@ -168,58 +179,26 @@ search_cmd: SEARCH PRODUCER VARNAME ref_exp
 	    }
 ;
 
-exp : LOAD ref_exp
-      {
-	$$ = new Load(static_cast<StringExp*>($2));
-      }
-    | LIST
-      {
-	$$ = new ListExp;
-      }
-    | VARNAME '[' ref_exp ']'
-      {
-	$$ = new ListRead($1, $3);
-      }
-    | ref_exp
-      {
-	$$ = $1;
-      }
-    | SEARCH PRODUCER VARNAME ref_exp
-      {
-	$$ = new SearchProducerRif($3, $4);
-      }
-    | SEARCH PRODUCERS VARNAME ref_exp
-      {
-	$$ = new SearchProducerRegex($3, $4);
-      }
-    | SEARCH PRODUCT ID VARNAME ref_exp
-      {
-	$$ = new SearchProductId($4, $5);
-      }
+exp : LOAD ref_exp { $$ = new Load(static_cast<StringExp*>($2)); }
+    | LIST { $$ = new ListExp; }
+    | VARNAME '[' ref_exp ']' { $$ = new ListRead($1, $3); }
+    | ref_exp { $$ = $1; }
+    | SEARCH PRODUCER VARNAME ref_exp { $$ = new SearchProducerRif($3, $4); }
+    | SEARCH PRODUCERS VARNAME ref_exp { $$ = new SearchProducerRegex($3, $4); }
+    | SEARCH PRODUCT ID VARNAME ref_exp { $$ = new SearchProductId($4, $5); }
     | SEARCH PRODUCT REGEX VARNAME ref_exp
       {
 	$$ = new SearchProductsRegex($4, $5);
       }
-    | SEARCH PRODUCT COD VARNAME ref_exp
-      {
-	$$ = new SearchProductsCod($4, $5);
-      }
-    | SEARCH PRODUCT RIF VARNAME ref_exp
-      {
-	$$ = new SearchProductsRif($4, $5);
-      }
-    | SEARCH NODE VARNAME ref_exp
-      {
-	$$ = new SearchNode($3, $4);
-      }
-    | COVER VARNAME VARNAME
-      {
-	$$ = new Cover($2, $3);
-      }
+    | SEARCH PRODUCT COD VARNAME ref_exp { $$ = new SearchProductsCod($4, $5); }
+    | SEARCH PRODUCT RIF VARNAME ref_exp { $$ = new SearchProductsRif($4, $5); }
+    | SEARCH NODE VARNAME ref_exp { $$ = new SearchNode($3, $4); }
+    | COVER VARNAME VARNAME { $$ = new Cover($2, $3); }
     | UPSTREAM VARNAME VARNAME ref_exp ref_exp
       {
 	$$ = new UpstreamB($2, $3, $4, $5);
       }
+    | RANKS VARNAME VARNAME { $$ = new RanksExp($2, $3); }
 ;
 
 ref_exp : STRCONST
@@ -575,7 +554,25 @@ ExecStatus Assign::execute()
 	assert(lvalue->var_type == rvalue->var_type);
 	lvalue->copy(rvalue);
 	return make_pair(true, "");
-      }      
+      }
+    case Exp::Type::RANKS:
+      {
+	again_ranks:
+	auto var = left_side->get_value_ptr();
+	if (var == nullptr)
+	  {
+	    var = new VarRanks;
+	    left_side->set_value_ptr(var);
+	  }
+	if (var->var_type != Var::VarType::Ranks)
+	  {
+	    left_side->free_value();
+	    goto again_ranks;
+	  }
+	auto & rvalue = static_cast<RanksExp*>(right_side)->ranks;
+	static_cast<VarRanks*>(var)->ranks = move(rvalue);
+	return make_pair(true, "");
+      }
     default:
       s << "Assign " << right_side->type_string() << " = "
 	<< left_side->type_string() << " not yet implemented";
@@ -1261,13 +1258,9 @@ ExecStatus SearchNode::execute()
   return make_pair(true, "");
 }
 
-ExecStatus Connected::semant_exp(Exp * exp, Net::Node *& ptr)
+static ExecStatus 
+semant_node_exp(Exp * exp, MetaMapa * mapa_ptr, Net::Node *& ptr)
 {
-  assert(mapa_ptr);
-  auto r = exp->execute();
-  if (not r.first)
-    return r;
-  
   stringstream s;
   switch (exp->type)
     {
@@ -1365,11 +1358,11 @@ ExecStatus Connected::execute()
   
   mapa_ptr = p.second;
 
-  auto r = semant_exp(src_exp, src);
+  auto r = semant_node_exp(src_exp, mapa_ptr, src);
   if (not r.first)
     return r;
 
-  r = semant_exp(tgt_exp, tgt);
+  r = semant_node_exp(tgt_exp, mapa_ptr, tgt);
   if (not r.first)
     return r;
 
@@ -1378,10 +1371,7 @@ ExecStatus Connected::execute()
   else
     cout << "Nodes are not reachable" << endl;
 
-  if (src_exp->type != VAR)
-    delete src_exp;
-  if (tgt_exp->type != VAR)
-    delete tgt_exp;
+  free();
   return make_pair(true, "");
 }
 
@@ -1815,7 +1805,7 @@ ExecStatus ArcsInt::semant()
   return make_pair(true, "");
 }
 
-ExecStatus ArcsInput::execute()
+ExecStatus ArcsInputId::execute()
 {
   auto r = semant();
   if (not r.first)
@@ -1849,7 +1839,7 @@ ExecStatus Arcs::execute()
   return make_pair(true, "");
 }
 
-ExecStatus ArcsOutput::execute()
+ExecStatus ArcsOutputId::execute()
 {
   auto r = semant();
   if (not r.first)
@@ -1863,6 +1853,180 @@ ExecStatus ArcsOutput::execute()
 
   report();
 
+  return make_pair(true, "");
+}
+
+static ExecStatus semant_producer(MetaMapa * mapa_ptr, 
+				  Exp * producer_exp, 
+				  Productor *& producer_ptr)
+{
+  auto r = producer_exp->execute();
+  if (not r.first)
+    return r;
+
+  stringstream s;
+  switch (producer_exp->type)
+    {
+    case Exp::STRCONST:
+      {
+	const auto & rif = static_cast<StringExp*>(producer_exp)->value;
+	producer_ptr = mapa_ptr->tabla_productores(rif);
+	if (producer_ptr == nullptr)
+	  {
+	    s << "producer rif " << rif << " not found";
+	    return make_pair(false, s.str());
+	  }
+	break;
+      }
+    case Exp::VAR:
+      {
+	auto varname = static_cast<Varname*>(producer_exp);
+	auto var = varname->get_value_ptr();
+	if (var == nullptr)
+	  {
+	    s << "var name " << varname->name << " has not a value" << endl
+	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
+	    return make_pair(false, s.str());
+	  }
+	switch (var->var_type)
+	  {
+	  case Var::VarType::String:
+	    {
+	      const auto & rif = static_cast<VarString*>(var)->value;
+	      producer_ptr = mapa_ptr->tabla_productores(rif);
+	      if (producer_ptr == nullptr)
+		{
+		  s << "producer rif " << rif << " not found";
+		  return make_pair(false, s.str());
+		}
+	      break;
+	    }
+	  case Var::VarType::Producer:
+	    producer_ptr = &static_cast<VarProducer*>(var)->productor;
+	    break;
+	  default:
+	    s << "var " << varname->name << " is not a producer or string type";
+	    return make_pair(false, s.str());
+	  }
+	break;
+      }
+    default:
+      s << "Producer expression is not a string with a rif neither a "
+	<< "producer var";
+    return make_pair(false, s.str());
+    }
+
+  return make_pair(true, "");
+}
+
+static ExecStatus semant_product(MetaMapa * mapa_ptr, 
+				 Exp * product_exp, 
+				 MetaProducto *& product_ptr)
+{
+  auto r = product_exp->execute();
+  if (not r.first)
+    return r;
+
+  stringstream s;
+  switch (product_exp->type)
+    {
+    case Exp::INTCONST:
+      {
+	const auto id = static_cast<IntExp*>(product_exp)->value;
+	product_ptr = mapa_ptr->tabla_productos(id);
+	if (product_ptr == nullptr)
+	  {
+	    s << "product id " << id << " not found";
+	    return make_pair(false, s.str());
+	  }
+	break;
+      }
+    case Exp::VAR:
+      {
+	auto varname = static_cast<Varname*>(product_exp);
+	auto var = varname->get_value_ptr();
+	if (var == nullptr)
+	  {
+	    s << "var name " << varname->name << " has not a value" << endl
+	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
+	    return make_pair(false, s.str());
+	  }
+	switch (var->var_type)
+	  {
+	  case Var::VarType::Int:
+	    {
+	      const auto id = static_cast<VarInt*>(var)->value;
+	      product_ptr = mapa_ptr->tabla_productos(id);
+	      if (product_ptr == nullptr)
+		{
+		  s << "product id " << id << " not found";
+		  return make_pair(false, s.str());
+		}
+	    break;
+	    }
+	  case Var::VarType::Product:
+	    product_ptr = &static_cast<VarProduct*>(var)->product;
+	    break;
+	  default:
+	    s << "var " << varname->name << " is not a product or integer type";
+	    return make_pair(false, s.str());
+	  }
+	break;
+      }
+    default:
+      s << "Producer expression is not a string with a rif neither a "
+	<< "producer var";
+    return make_pair(false, s.str());
+    }
+
+  return make_pair(true, "");
+}
+
+ExecStatus ArcsProducer::semant()
+{
+  auto r = semant_mapa();
+  if (not r.first)
+    return r;
+
+  r = semant_producer(mapa_ptr, producer_exp, producer_ptr);
+  if (not r.first)
+    return r;
+  
+  r = semant_product(mapa_ptr, product_exp, product_ptr);
+  if (not r.first)
+    return r;
+
+  node_ptr = mapa_ptr->search_node(producer_ptr->rif);
+  if (node_ptr == nullptr)
+    {
+      stringstream s;
+      s << "No node is associated to producer " << producer_ptr->rif;
+      return make_pair(false, s.str());
+    }
+
+  free();
+  return make_pair(true, "");
+}
+
+ExecStatus ArcsInputP::execute()
+{
+  auto r = semant();
+  if (not r.first)
+    return r;
+
+  arc_list = mapa_ptr->net.in_arcs(node_ptr);
+  report();
+  return make_pair(true, "");
+}
+
+ExecStatus ArcsOutputP::execute()
+{
+  auto r = semant();
+  if (not r.first)
+    return r;
+
+  arc_list = mapa_ptr->net.out_arcs(node_ptr);
+  report();
   return make_pair(true, "");
 }
 
@@ -1894,7 +2058,7 @@ ExecStatus ArcsRegex::execute()
     }
 }
 
-void Arc::report()
+static void arcs_report(MetaMapa * mapa_ptr, const DynList<Net::Arc*> & l)
 {
   const string col0 = "rif";
   const string col1 = "ins_id";
@@ -1905,7 +2069,7 @@ void Arc::report()
 
   using Line = tuple<string,string,string,string,string,string>;
 
-  auto lines = arc_list.map<Line>([this, tbl = mapa_ptr->tabla_insumos] (auto a)
+  auto lines = l.map<Line>([mapa_ptr, tbl = mapa_ptr->tabla_insumos] (auto a)
     {
       auto src = mapa_ptr->net.get_src_node(a);
       auto tgt = mapa_ptr->net.get_tgt_node(a);
@@ -1954,6 +2118,11 @@ void Arc::report()
     });
 }
 
+void Arc::report()
+{
+  arcs_report(mapa_ptr, arc_list);
+}
+
 ExecStatus Save::execute()
 {
   auto p = ::semant_mapa(mapa_name);
@@ -1992,5 +2161,85 @@ ExecStatus Save::execute()
   cout << "done!" << endl;
 
   free();
+  return make_pair(true, "");
+}
+
+ExecStatus ComputePath::execute()
+{
+  auto r = ::semant_mapa(mapa_name);
+  if (not r.first.first)
+    return r.first;
+  
+  mapa_ptr = r.second;
+
+  auto n = semant_node_exp(src_exp, mapa_ptr, src);
+  if (not n.first)
+    return n;
+
+  n = semant_node_exp(tgt_exp, mapa_ptr, tgt);
+  if (not n.first)
+    return n;
+
+  cout << "Computing a min path from " << src->get_info()->rif << " to "
+       << tgt->get_info()->rif << endl;
+  auto p = Directed_Find_Path<Net>(mapa_ptr->net).bfs(src, tgt);
+  if (p.is_empty())
+    {
+      cout << "Not found, what does not necessarily mean that it does not exist"
+	   << " the inverse" << endl;
+      return make_pair(true, "");
+    }
+
+  cout << endl;
+  arcs_report(mapa_ptr, p.arcs());
+  cout << endl;
+
+  free();
+  return make_pair(true, "");
+}
+
+string VarRanks::info() const
+{
+  size_t diameter = 0;
+  size_t ratio = 0;
+  stringstream s;
+  ranks.for_each([&s, &ratio, &diameter] (auto r)
+    {
+      size_t ratio_i = 0;
+      s << "Rank "  << diameter++ << endl;
+      r.for_each([&s, &ratio_i] (auto ptr)
+        {
+	  s << "    " << ptr->get_info()->to_string() << endl;
+	  ++ratio_i;
+	});
+      s << "    " << ratio_i << " nodes" << endl;
+      ratio = max(ratio, ratio_i);
+    });
+  s << diameter << " ranks" << endl;
+  return s.str();
+}
+
+ExecStatus RanksExp::execute()
+{
+  auto rmapa = semant_mapa(mapa_name);
+  if (not rmapa.first.first)
+    return rmapa.first;
+
+  auto mapa_ptr = rmapa.second;
+
+  auto rnet = semant_net(net_name);
+  if (not rnet.first.first)
+    return rnet.first;
+  
+  auto varnet = rnet.second;
+  if (varnet->mapa_ptr != mapa_ptr)
+    {
+      stringstream s;
+      s << "var net " << net_name << " is not related to map" << mapa_name;
+      return make_pair(false, s.str());
+    }
+
+  ranks = Q_Topological_Sort<Net>().ranks(varnet->net);
+
   return make_pair(true, "");
 }

@@ -32,8 +32,9 @@ inline string only_alpha(const string & str)
   for (size_t i = 0, n = str.size(); i < n; ++i)
     {
       auto c = str[i];
-      switch (str[i])
+      switch (c)
 	{
+	case '0'...'9':
 	case 'a'...'z': ret.push_back(c); break;
 	case 'A'...'Z': ret.push_back(tolower(c)); break;
 	default: break;

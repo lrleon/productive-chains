@@ -100,7 +100,19 @@ R"(Informacion sobre una variable y su contenido
 static const char * reachable =
 R"(Determina si dos nodos están relacionados
    
-       reachable <mapa-var> <nodo-var-1> <nodo-var-2>
+       reachable <mapa-var> <productor-exp-1> <productor-exp-2>
+
+   Este comando calcula linealmente si de alguna manera el el productor 
+   <productor-exp-1> está relacionado con el productor <productor-exp-2>.
+
+   Un expresión válida para un productor es un cadena constante con un rif,
+   una variable string con el rif, una variable productor o una variable nodo.
+
+   NOTA: Si los productores están relacionados la respuesta no indica el 
+   sentido de relación; es decir, cuál de los dos productores involucrados
+   antecede al otro.
+
+   Use path para calcular un camino exacto.
    )";
 
 static const char * cover =
@@ -179,6 +191,63 @@ R"(Calcula los insumos de entrada de un producto o los arcos de entrada de
    o una variable entera conteniendo el producto_id o una variable producto.
    )";
 
+static const char * arcs_help =
+R"(Métodos de búsqueda de arcos
+   
+       arcs input id <mapa-var> <producer-exp>
+
+   Retorna los arcos de entrada del productor <producer-exp> en el
+   mapa <mapa-var>
+
+       arcs product id <mapa-var> <producer-exp>
+
+
+   Retorna los arcos de salida del productor <producer-exp> en el
+   mapa <mapa-var>
+
+       arcs regex <mapa-var> <regex-exp>
+
+   Retorna los arcos del mapa <mapa-var> cuyo nombre de insumo encaje con
+   la expresión regular <regex-exp>.
+
+   ADVERTENCIA: si el mapa es muy grande, esta búsqueda puede ser muuuuuuuuuy
+                leeeeeeeeeeenta.
+
+
+       arcs input <mapa-vap> <producer-exp> <producto-exp>
+
+   Retorna los arcos de entrada del <producto-exp> producido por el productor
+   <producer-exp> en el mapa <mapa-vap>
+
+
+       arcs output <mapa-vap> <producer-exp> <producto-exp>
+
+   Retorna los arcos de salida del <producto-exp> producido por el productor
+   <producer-exp> en el mapa <mapa-vap>
+
+   
+       arcs <mapa-var> <arc-id-exp>
+
+   Retorna el arco del mapa <mapa-var> cuyo arco id es <arco-id-exp>
+   )";
+
+static const char * path_help =
+R"(Calcula el camino mínimo (en arcos) entre un par de productores
+
+       path <mapa-var> <productor-exp-1> <productor-exp-2>
+
+   Este comando calcula linealmente un camino mínimo que comienza en el 
+   productor definido por <productor-exp-1> y que termina en el productor
+   definido con <productor-exp-2>.
+
+   Un expresión válida para un productor es un cadena constante con un rif,
+   una variable string con el rif, una variable productor o una variable nodo.
+
+   NOTA: Tome en cuenta que si no existe el camino, quizá podría existir el
+   inverso; es decir desde <productor-exp-2> hasta <productor-exp-1>.
+   )";
+
+
 ExecStatus Help::execute()
 {
   cout << endl;
@@ -196,6 +265,8 @@ ExecStatus Help::execute()
     case COVER: cout << cover << endl; break;
     case UPSTREAM: cout << up << endl; break;
     case INPUTS: cout << inputs << endl; break;
+    case ARCS: cout << arcs_help << endl; break;
+    case PATH: cout << path_help << endl; break;
     default: cout << "No help topic" << endl; break;
     }
   return make_pair(true, "");

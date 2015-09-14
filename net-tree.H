@@ -43,7 +43,7 @@ struct Exp : public ASTNode
 	      SEARCHPRODUCER, APPEND, LISTREAD, LISTWRITE, SEARCHPRODUCERREGEX,
 	      SEARCHPRODUCTID, SEARCHPRODUCTREGEX, SEARCHPRODUCTCOD,
 	      SEARCHPRODUCTRIF, SEARCHNODE, NODE, COVER, REACHABLE,
-	      UPSTREAM, INPUTS, ARCS, SAVE,
+	      UPSTREAM, INPUTS, ARCS, SAVE, PATH, RANKS,
 	      TYPEINFO, HELP, DOT, BLOCKS, ERROR } type;
 
   string type_string() const
@@ -79,6 +79,8 @@ struct Exp : public ASTNode
       case INPUTS: return "INPUTS";
       case ARCS: return "ARCS";
       case SAVE: return "SAVE";
+      case PATH: return "PATH";
+      case RANKS: return "RANKS";
       default: ERROR("Tipo de expresion invalido");
       }
     return string("INVALID");
@@ -98,6 +100,38 @@ struct ErrorExp : Exp
   ErrorExp(const string & m) : Exp(ERROR), msg(m) {}
   ExecStatus execute() { return make_pair(false, msg); }
   void free() {}
+};
+
+struct RanksExp : public Exp
+{
+  const string mapa_name;
+  const string net_name;
+  DynList<DynList<Net::Node*>> ranks;
+  RanksExp(const string & mname, const string & nname)
+    : Exp(RANKS), mapa_name(mname), net_name(nname) {}
+  ExecStatus execute();
+  void free() {}
+};
+
+struct ComputePath : public Exp
+{
+  const string mapa_name;
+  Exp * src_exp = nullptr;
+  Exp * tgt_exp = nullptr;
+  MetaMapa * mapa_ptr = nullptr;
+  Net::Node * src = nullptr;
+  Net::Node * tgt = nullptr;
+
+  ComputePath(const string & mname, Exp * sexp, Exp * texp)
+    : Exp(PATH), mapa_name(mname), src_exp(sexp), tgt_exp(texp) {}
+  ExecStatus execute();
+  void free() 
+  {
+    if (src_exp->type != VAR)
+      delete src_exp; 
+    if (tgt_exp->type != VAR)
+      delete tgt_exp; 
+  }
 };
 
 struct Arc : public Exp
@@ -125,21 +159,56 @@ struct ArcsInt : public Arc
   long id = -1;
   ArcsInt(const string & mapa_name, Exp * exp) : Arc(mapa_name), int_exp(exp) {}
   ExecStatus semant();
-  void free() { if (int_exp->type != VAR) delete int_exp; }
+  void free() { if (int_exp and int_exp->type != VAR) delete int_exp; }
 };
 
-struct ArcsInput : public ArcsInt
+struct ArcsInputId : public ArcsInt
 {
-  ArcsInput(const string & mapa_name, Exp * exp) : ArcsInt(mapa_name, exp) {}
+  ArcsInputId(const string & mapa_name, Exp * exp) : ArcsInt(mapa_name, exp) {}
   ExecStatus execute();
   void free() { ArcsInt::free(); }
 };
 
-struct ArcsOutput : public ArcsInt
+struct ArcsOutputId : public ArcsInt
 {
-  ArcsOutput(const string & mapa_name, Exp * exp) : ArcsInt(mapa_name, exp) {}
+  ArcsOutputId(const string & mapa_name, Exp * exp) : ArcsInt(mapa_name, exp) {}
   ExecStatus execute();
   void free() { ArcsInt::free(); }
+};
+
+struct ArcsProducer : public Arc
+{
+  Exp * producer_exp = nullptr;
+  Exp * product_exp = nullptr;
+  Productor * producer_ptr = nullptr;
+  MetaProducto * product_ptr = nullptr;
+  Net::Node * node_ptr = nullptr;
+
+  ArcsProducer(const string & mapa_name, Exp * producer, Exp * product)
+    : Arc(mapa_name), producer_exp(producer), product_exp(product) {}
+  ExecStatus semant();
+  void free() 
+  {
+    if (producer_exp and producer_exp->type != VAR) delete producer_exp; 
+    if (product_exp and product_exp->type != VAR) delete product_exp;
+  }
+};
+
+struct ArcsInputP : public ArcsProducer
+{
+  ArcsInputP(const string & mapa_name, Exp * producer, Exp * product)
+    : ArcsProducer(mapa_name, producer, product) {}
+  ExecStatus execute();
+  void free() { ArcsProducer::free(); }
+};
+
+
+struct ArcsOutputP : public ArcsProducer
+{
+  ArcsOutputP(const string & mapa_name, Exp * producer, Exp * product)
+    : ArcsProducer(mapa_name, producer, product) {}
+  ExecStatus execute();
+  void free() { ArcsProducer::free(); }
 };
 
 struct Arcs : public ArcsInt
@@ -195,7 +264,7 @@ struct Append : public Exp
 struct Var
 {
   enum VarType { Map, List, String, Int, Producer, Product, Node, 
-		 Cover} var_type;
+		 Cover, Ranks} var_type;
 
   Var(VarType type) : var_type(type) {}
 
@@ -314,7 +383,6 @@ struct Connected : public Exp
     : Exp(REACHABLE), mapa_name(name), src_exp(src), tgt_exp(tgt) {}
       // Valida que exp sea rif, producer o nodo y pone el el nodo en ptr
   ExecStatus semant_mapa();
-  ExecStatus semant_exp(Exp * exp, Net::Node *& ptr);
   ExecStatus execute();
   void free() 
   {
@@ -388,13 +456,35 @@ struct Rm : public Exp
   void free() {}
 };
 
+struct VarRanks : public Var
+{
+  MetaMapa * mapa_ptr = nullptr;
+  DynList<DynList<Net::Node*>> ranks;
+  VarRanks() : Var(Ranks) {}
+  VarRanks * clone() const { return new VarRanks; }
+  void copy(Var * src) { *this = *static_cast<VarRanks*>(src); }
+  string info() const;
+  string type_info() const
+  {
+    size_t diameter = ranks.size();
+    size_t ratio = ranks.foldl<size_t>(0, [] (auto a, auto r) 
+      {
+	return max(a, r.size());
+      });
+    stringstream s;
+    s << "Rank var:" << endl
+      << "    Diameter = " << diameter << endl
+      << "    ration   = " << ratio << endl;
+    return s.str();
+  }
+};
+
 struct VarMap : public Var
 {
   MetaMapa value;
   DynList<Net*> net_list; // redes dependientes de este mapa
   VarMap() : Var(Map) {}
-
-  VarMap * clone() const { return new VarMap(); }
+  VarMap * clone() const { return new VarMap; }
   void copy(Var * src) { value = static_cast<VarMap*>(src)->value; }
   string info() const 
   {

@@ -1,6 +1,6 @@
 ALEPH = ~/aleph-w
 
-CLANGPATH = /home/lrleon/LLVM-3.6.1/bin
+CLANGPATH = /home/lrleon/LLVM-3.7/bin
 
 CXX = $(CLANGPATH)/clang++
 CC = $(CLANGPATH)/clang

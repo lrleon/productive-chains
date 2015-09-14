@@ -539,7 +539,7 @@ struct TablaProveedorInsumo : public DynArray<ProveedorInsumo>
 
     this->reserve(heap.size());
     for (size_t i = 0; not heap.is_empty(); ++i)
-      this->access(i) = move(heap.getMin());
+      this->access(i) = heap.getMin();
 
     if (::verbose)
       cout << "Done!" << endl
