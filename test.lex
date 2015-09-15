@@ -87,6 +87,7 @@ ARCS         [aa][rR][cC][sS]
 PATH         [pP][aA][tT][hH]
 RANKS        [rR][aA][nN][kK][sS]
 SHAREHOLDER  [sS][hH][aA][rR][eE][hH][oO][lL][dD][eE][rR]
+HOLDING      [hH][oO][lL][dD][iI][nN][gG]
 
 SPACE           [ \f\r\t\v]
 
@@ -134,6 +135,7 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
 {PATH}       return PATH;
 {RANKS}      return RANKS;
 {SHAREHOLDER} return SHAREHOLDER;
+{HOLDING}    return HOLDING;
 
  /*
   * The single-characters tokens 

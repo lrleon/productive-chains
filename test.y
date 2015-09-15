@@ -36,7 +36,7 @@
 
 %token LOAD SAVE EXIT ERROR INFO LS RM SEARCH PRODUCER PRODUCERS LIST APPEND
 %token PRODUCT ID REGEX HELP COD TYPEINFO RIF NODE REACHABLE COVER DOT UPSTREAM
-%token INPUTS ARCS OUTPUTS PATH INPUT OUTPUT RANKS SHAREHOLDER
+%token INPUTS ARCS OUTPUTS PATH INPUT OUTPUT RANKS SHAREHOLDER HOLDING
 %token <symbol> STRCONST INTCONST VARNAME 
 
 %type <expr> exp
@@ -112,6 +112,8 @@ cmd_unit: EXIT
 	  }
         | PATH VARNAME ref_exp ref_exp { $$ = new ComputePath($2, $3, $4); }
         | SEARCH SHAREHOLDER VARNAME ref_exp { $$ = new Shareholder($3, $4); }
+        | SEARCH HOLDING VARNAME ref_exp { $$ = new HoldigRif($3, $4); }
+        | SEARCH HOLDING REGEX VARNAME ref_exp { $$ = new HoldingRegex($4,$5); }
 ;
 
 help_exp: HELP           { $$ = new Help; }
@@ -2253,11 +2255,10 @@ ExecStatus RanksExp::execute()
   return make_pair(true, "");
 }
 
-void Holding::report()
+void Holder::report()
 {
   using Line = tuple<string, string, string>;
-  auto l = sort(socios, [] (auto p1, auto p2) 
-		{ return get<2>(p1) < get<2>(p2); }).map<Line>([this] (auto p)
+  auto l = lista.map<Line>([this] (auto p)
        {
 	 auto socio = mapa_ptr->tabla_socios(get<0>(p));
 	 return make_tuple(get<0>(p), socio->nombre, to_string(get<2>(p)));
@@ -2295,7 +2296,7 @@ ExecStatus Shareholder::execute()
   if (not p.first)
     return p;
 
-  socios = producer_ptr->socios.map<Holder>([this] (auto p)
+  lista = producer_ptr->socios.map<Desc>([this] (auto p)
       {
 	auto socio = mapa_ptr->tabla_socios(p.first);
 	return make_tuple(p.first, socio->nombre, p.second);
@@ -2303,6 +2304,76 @@ ExecStatus Shareholder::execute()
 
   cout << producer_ptr->rif << " " << producer_ptr->nombre << endl
        << "Shareholders:" << endl;
+  report();
+
+  return make_pair(true, "");
+}
+
+ExecStatus HoldingRegex::execute()
+{
+  {
+    auto p = semant_mapa(mapa_name);
+    if (not p.first.first)
+      return p.first;
+    mapa_ptr = p.second;
+  }
+
+  auto p = semant_string(regex_exp);
+  if (not p.first.first)
+    return p.first;
+
+  const string & str = p.second;
+  try
+    {
+      auto producers = mapa_ptr->producers_by_name(str);
+      producers.for_each([this] (auto producer_ptr)
+        {
+	  producer_ptr->socios.for_each([this] (auto p)
+            {
+	      auto socio = mapa_ptr->tabla_socios(p.first);
+	      lista.append(make_tuple(p.first, socio->nombre, p.second));
+	    });
+	});
+      report();
+      return make_pair(true, "");
+    }
+  catch (regex_error & e)
+    {
+      return make_pair(false, e.what());
+    }
+  
+  return make_pair(true, "");
+}
+
+ExecStatus HoldigRif::execute()
+{
+  {
+    auto p = semant_mapa(mapa_name);
+    if (not p.first.first)
+      return p.first;
+    mapa_ptr = p.second;
+  }
+
+  auto p = semant_string(rif_exp);
+  if (not p.first.first)
+    return p.first;
+
+  const string & rif = p.second;
+
+  stringstream s;
+  auto ptr = mapa_ptr->tabla_socios(rif);
+  if (ptr == nullptr)
+    {
+      s << "Rif " << rif << " not found";
+      return make_pair(false, s.str());
+    }
+  cout << "Holdings for " << rif << ptr->nombre << ":" << endl;
+  lista = ptr->empresas.map<Desc>([this] (auto p)
+    {
+      auto producer_ptr = mapa_ptr->tabla_productores(p.first);
+      assert(producer_ptr);
+      return make_tuple(p.first, producer_ptr->nombre, p.second);
+    });
   report();
 
   return make_pair(true, "");

@@ -95,21 +95,38 @@ struct Exp : public ASTNode
   void free() { ERROR("Exp: free() method called"); }
 };
 
-struct Holding : public Exp
+struct Holder : public Exp
 {
-  using Holder = tuple<string, string, float>;
+  using Desc = tuple<string, string, float>;
   const string mapa_name;
   MetaMapa * mapa_ptr = nullptr;
-  DynList<Holder> socios;
+  DynList<Desc> lista;
   void report();
-  Holding(const string & mname) : Exp(HOLDER), mapa_name(mname) {}
+  Holder(const string & mname) : Exp(HOLDER), mapa_name(mname) {}
   void free() {}
 };
 
-struct Shareholder : public Holding
+struct Shareholder : public Holder
 {
   Exp * rif_exp = nullptr;
-  Shareholder(const string & mname, Exp * exp) : Holding(mname), rif_exp(exp) {}
+  Shareholder(const string & mname, Exp * exp) : Holder(mname), rif_exp(exp) {}
+  ExecStatus execute();
+  void free() { if (rif_exp->type != VAR) delete rif_exp; }
+};
+
+struct HoldingRegex : public Holder
+{
+  Exp * regex_exp = nullptr;
+  HoldingRegex(const string & mname, Exp * exp) 
+    : Holder(mname), regex_exp(exp) {}
+  ExecStatus execute();
+  void free() { if (regex_exp->type != VAR) delete regex_exp; }
+};
+
+struct HoldigRif : public Holder
+{
+  Exp * rif_exp = nullptr;
+  HoldigRif(const  string & mname, Exp * exp) : Holder(mname), rif_exp(exp) {}
   ExecStatus execute();
   void free() { if (rif_exp->type != VAR) delete rif_exp; }
 };
