@@ -381,6 +381,9 @@ private:
 		Node * ttgt,                     // imagen de stgt en net_up
 		size_t threshold) const          // tolerancia en string dist
   {
+    if (tgt_producto_ptr == nullptr)
+      return true;
+
     assert(mapped_node<Net>(stgt) == ttgt);
     assert(stgt->get_info() == ttgt->get_info());
 
@@ -440,8 +443,7 @@ private:
 	    Net::map_nodes(ssrc, tsrc);
 	    productos_list(tsrc) = new DynList<MetaProducto*>;
 	  }
-	assert(productos_list(tsrc));
-	// net_up.insert_arc(tsrc, ttgt, a->get_info());
+	net_up.insert_arc(tsrc, ttgt, a->get_info());
 
 	// ERROR? si se retorna desde ssrc ==> hay que eliminar este arco
 
@@ -450,10 +452,10 @@ private:
  	auto productos = inter_productor_cod_aran(src_productor_ptr, cod_aran);
 	auto dist = min_distance_match(productos, input_name, threshold);
 
+	//  imprimir nombre insumo y nombre de producto
+
 	auto src_producto = get<1>(dist);
-	if (src_producto != nullptr)
-	  if (upstream_best(ssrc, src_producto, net_up, tsrc, threshold))
-	    net_up.insert_arc(tsrc, ttgt, a->get_info());
+	upstream_best(ssrc, src_producto, net_up, tsrc, threshold);
 
 	// no mete el arco porque no se consigue uno con
 	// min_distance_match. Ver como hacer pero debe haber error

@@ -86,6 +86,7 @@ OUTPUT       [oO][uU][tT][pP][uU][tT]
 ARCS         [aa][rR][cC][sS]
 PATH         [pP][aA][tT][hH]
 RANKS        [rR][aA][nN][kK][sS]
+SHAREHOLDER  [sS][hH][aA][rR][eE][hH][oO][lL][dD][eE][rR]
 
 SPACE           [ \f\r\t\v]
 
@@ -132,6 +133,7 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
 {ARCS}       return ARCS;
 {PATH}       return PATH;
 {RANKS}      return RANKS;
+{SHAREHOLDER} return SHAREHOLDER;
 
  /*
   * The single-characters tokens 

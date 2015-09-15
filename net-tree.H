@@ -43,7 +43,7 @@ struct Exp : public ASTNode
 	      SEARCHPRODUCER, APPEND, LISTREAD, LISTWRITE, SEARCHPRODUCERREGEX,
 	      SEARCHPRODUCTID, SEARCHPRODUCTREGEX, SEARCHPRODUCTCOD,
 	      SEARCHPRODUCTRIF, SEARCHNODE, NODE, COVER, REACHABLE,
-	      UPSTREAM, INPUTS, ARCS, SAVE, PATH, RANKS,
+	      UPSTREAM, INPUTS, ARCS, SAVE, PATH, RANKS, SHAREHOLDER,
 	      TYPEINFO, HELP, DOT, BLOCKS, ERROR } type;
 
   string type_string() const
@@ -81,6 +81,7 @@ struct Exp : public ASTNode
       case SAVE: return "SAVE";
       case PATH: return "PATH";
       case RANKS: return "RANKS";
+      case SHAREHOLDER: return "SHAREHOLDER";
       default: ERROR("Tipo de expresion invalido");
       }
     return string("INVALID");
@@ -92,6 +93,17 @@ struct Exp : public ASTNode
     ERROR("Epx: execute method called"); return ExecStatus(); 
   }
   void free() { ERROR("Exp: free() method called"); }
+};
+
+struct Shareholder : public Exp
+{
+  const string mapa_name;
+  Exp * rif_exp = nullptr;
+  MetaMapa * mapa_ptr = nullptr;
+  Shareholder(const string & mname, Exp * exp) 
+    : Exp(SHAREHOLDER), mapa_name(mname), rif_exp(exp) {}
+  ExecStatus execute();
+  void free() { if (rif_exp->type != VAR) delete rif_exp; }
 };
 
 struct ErrorExp : Exp
@@ -474,7 +486,7 @@ struct VarRanks : public Var
     stringstream s;
     s << "Rank var:" << endl
       << "    Diameter = " << diameter << endl
-      << "    ration   = " << ratio << endl;
+      << "    ratio    = " << ratio << endl;
     return s.str();
   }
 };
@@ -575,6 +587,8 @@ struct VarList : public Var
     list.for_each([&i, &s] (auto v) { s << i++ << ": " << v->info() << endl; });
     if (i == 0)
       s << "EMPTY";
+    else
+      s << i << " elements";
     s << endl;
     return s.str();
   }

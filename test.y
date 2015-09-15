@@ -36,7 +36,7 @@
 
 %token LOAD SAVE EXIT ERROR INFO LS RM SEARCH PRODUCER PRODUCERS LIST APPEND
 %token PRODUCT ID REGEX HELP COD TYPEINFO RIF NODE REACHABLE COVER DOT UPSTREAM
-%token INPUTS ARCS OUTPUTS PATH INPUT OUTPUT RANKS
+%token INPUTS ARCS OUTPUTS PATH INPUT OUTPUT RANKS SHAREHOLDER
 %token <symbol> STRCONST INTCONST VARNAME 
 
 %type <expr> exp
@@ -111,6 +111,7 @@ cmd_unit: EXIT
 	    $$ = new ArcsOutputP($3,$4,$5); 
 	  }
         | PATH VARNAME ref_exp ref_exp { $$ = new ComputePath($2, $3, $4); }
+        | SEARCH SHAREHOLDER VARNAME ref_exp { $$ = new Shareholder($3, $4); }
 ;
 
 help_exp: HELP           { $$ = new Help; }
@@ -238,7 +239,15 @@ rvalue: VARNAME
 
 void yyerror(char const * s) 
 {
-  cout << "ERROR " << s << " " << endl;
+  cout << "Error de sintaxis" << endl
+       << endl
+       << "Asegúrate de NO HABER USADO como identificador alguna de las" << endl
+       << "siguientes palabras reservadas:" << endl
+       << "LOAD SAVE EXIT INFO LS RM SEARCH PRODUCER PRODUCERS PRODUCT" << endl
+       << "ID REGEX LIST APPEND HELP COD TYPE RIF NODE REACHABLE COVER" << endl
+       << "DOT UPSTREAM INPUTS OUTPUTS INPUT OUTPUT ARCS PATH RANKS" << endl
+       << "SHAREHOLDER" << endl
+       << endl;
 }
 
 ExecStatus Load::execute()
@@ -2240,6 +2249,50 @@ ExecStatus RanksExp::execute()
     }
 
   ranks = Q_Topological_Sort<Net>().ranks(varnet->net);
+
+  return make_pair(true, "");
+}
+
+ExecStatus Shareholder::execute()
+{
+  {
+    auto p = semant_mapa(mapa_name);
+    if (not p.first.first)
+      return p.first;
+    mapa_ptr = p.second;
+  }
+
+  Productor * producer_ptr = nullptr;
+  auto p = semant_producer(mapa_ptr, rif_exp, producer_ptr);
+  if (not p.first)
+    return p;
+
+  using Line = tuple<string, string, string>;
+  cout << producer_ptr->rif << " " << producer_ptr->nombre << endl
+       << "Shareholders:" << endl;
+  auto l = sort(producer_ptr->socios, [] (auto p1, auto p2) 
+    { return p1.second < p2.second; }).map<Line>([this] (auto p)
+       {
+	 auto socio = mapa_ptr->tabla_socios(p.first);
+	 return make_tuple(p.first, socio->nombre, to_string(p.second));
+       });
+
+  using Lens = tuple<size_t, size_t, size_t>;
+  auto lens = l.foldl<Lens>(make_tuple(0, 0, 0), [] (auto acu, auto p)
+    {
+      return make_tuple(max(get<0>(acu), get<0>(p).size()),
+			max(get<1>(acu), get<1>(p).size()),
+			max(get<2>(acu), get<2>(p).size()));
+    });
+  
+  l.for_each([&lens] (auto p)
+    {
+      const string blanks0(get<0>(lens), ' ');
+      const string blanks1(get<1>(lens), ' ');
+      const string blanks2(get<2>(lens), ' ');
+      cout << blanks0 << get<0>(p) << " " << blanks1 << get<1>(p) 
+	   << " " << blanks2 << get<2>(p) << endl;
+    });
 
   return make_pair(true, "");
 }

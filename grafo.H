@@ -250,8 +250,7 @@ public:
     if (provs.is_empty())
       {
 	stringstream s;
-	s << "Insumo id " << insumo_id << " no tiene proveedores declarados "
-	  " para el año " << anho;
+	s << "Insumo id " << insumo_id << " no tiene proveedores declarados ";
 	log.append(s.str());
 	return make_pair(DynList<SemiArco>(), cod_aran);
       } 

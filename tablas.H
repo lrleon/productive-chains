@@ -682,13 +682,20 @@ struct Productor
 
   string to_string() const
   {
-    return (nacional ? "VEN" : "EXT") + BLANK + rif + BLANK + nombre;
+    stringstream s;
+    s << (nacional ? "VEN" : "EXT") << BLANK << rif << BLANK << nombre << endl
+      << "    Productos (" << productos.size() << "): ";
+    productos.for_each([&s] (auto p) 
+      { 
+	s << "(" << get<0>(p) << "," << get<1>(p) << "), ";
+      }); 
+    return s.str();
   }
 
   friend ostream & operator << (ostream & out, const Productor & p)
   {
     out << (p.nacional ? "VEN" : "EXT")
-	<< BLANK	<< p.rif << BLANK << p.nombre << endl
+	<< BLANK << p.rif << BLANK << p.nombre << endl
 	<< "    Productos (" << p.productos.size() << "): ";
     p.productos.for_each([&out] (auto p) 
       { 
@@ -768,8 +775,12 @@ struct MetaProducto
   {
     stringstream s;
     s << id << BLANK << cod_aran << BLANK << nombre << endl
-      << productores.size() << " :";
+      << "Productores rifs (" << productores.size() << ") :";
     productores.for_each([&s] (auto p) { s << BLANK << p; });
+    s << endl
+      << "Insumos id's (" << comb.size() << ") :";
+    sort(comb, [] (auto c1, auto c2) { return get<0>(c1) < get<0>(c2); }).
+      for_each([&s] (auto c) { s << BLANK << get<0>(c); });
     return s.str();
   }
 
