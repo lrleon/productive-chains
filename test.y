@@ -2253,6 +2253,34 @@ ExecStatus RanksExp::execute()
   return make_pair(true, "");
 }
 
+void Holding::report()
+{
+  using Line = tuple<string, string, string>;
+  auto l = sort(socios, [] (auto p1, auto p2) 
+		{ return get<2>(p1) < get<2>(p2); }).map<Line>([this] (auto p)
+       {
+	 auto socio = mapa_ptr->tabla_socios(get<0>(p));
+	 return make_tuple(get<0>(p), socio->nombre, to_string(get<2>(p)));
+       });
+
+  using Lens = tuple<size_t, size_t, size_t>;
+  auto lens = l.foldl<Lens>(make_tuple(0, 0, 0), [] (auto acu, auto p)
+    {
+      return make_tuple(max(get<0>(acu), get<0>(p).size()),
+			max(get<1>(acu), get<1>(p).size()),
+			max(get<2>(acu), get<2>(p).size()));
+    });
+  
+  l.for_each([&lens] (auto p)
+    {
+      const string blanks0(get<0>(lens) - get<0>(p).size(), ' ');
+      const string blanks1(get<1>(lens) - get<1>(p).size(), ' ');
+      const string blanks2(get<2>(lens) - get<2>(p).size(), ' ');
+      cout << blanks0 << get<0>(p) << " " << blanks1 << get<1>(p) 
+	   << " " << blanks2 << get<2>(p) << endl;
+    });
+}
+
 ExecStatus Shareholder::execute()
 {
   {
@@ -2267,32 +2295,15 @@ ExecStatus Shareholder::execute()
   if (not p.first)
     return p;
 
-  using Line = tuple<string, string, string>;
+  socios = producer_ptr->socios.map<Holder>([this] (auto p)
+      {
+	auto socio = mapa_ptr->tabla_socios(p.first);
+	return make_tuple(p.first, socio->nombre, p.second);
+      });
+
   cout << producer_ptr->rif << " " << producer_ptr->nombre << endl
        << "Shareholders:" << endl;
-  auto l = sort(producer_ptr->socios, [] (auto p1, auto p2) 
-    { return p1.second < p2.second; }).map<Line>([this] (auto p)
-       {
-	 auto socio = mapa_ptr->tabla_socios(p.first);
-	 return make_tuple(p.first, socio->nombre, to_string(p.second));
-       });
-
-  using Lens = tuple<size_t, size_t, size_t>;
-  auto lens = l.foldl<Lens>(make_tuple(0, 0, 0), [] (auto acu, auto p)
-    {
-      return make_tuple(max(get<0>(acu), get<0>(p).size()),
-			max(get<1>(acu), get<1>(p).size()),
-			max(get<2>(acu), get<2>(p).size()));
-    });
-  
-  l.for_each([&lens] (auto p)
-    {
-      const string blanks0(get<0>(lens), ' ');
-      const string blanks1(get<1>(lens), ' ');
-      const string blanks2(get<2>(lens), ' ');
-      cout << blanks0 << get<0>(p) << " " << blanks1 << get<1>(p) 
-	   << " " << blanks2 << get<2>(p) << endl;
-    });
+  report();
 
   return make_pair(true, "");
 }

@@ -43,7 +43,7 @@ struct Exp : public ASTNode
 	      SEARCHPRODUCER, APPEND, LISTREAD, LISTWRITE, SEARCHPRODUCERREGEX,
 	      SEARCHPRODUCTID, SEARCHPRODUCTREGEX, SEARCHPRODUCTCOD,
 	      SEARCHPRODUCTRIF, SEARCHNODE, NODE, COVER, REACHABLE,
-	      UPSTREAM, INPUTS, ARCS, SAVE, PATH, RANKS, SHAREHOLDER,
+	      UPSTREAM, INPUTS, ARCS, SAVE, PATH, RANKS, HOLDER,
 	      TYPEINFO, HELP, DOT, BLOCKS, ERROR } type;
 
   string type_string() const
@@ -81,7 +81,7 @@ struct Exp : public ASTNode
       case SAVE: return "SAVE";
       case PATH: return "PATH";
       case RANKS: return "RANKS";
-      case SHAREHOLDER: return "SHAREHOLDER";
+      case HOLDER: return "HOLDER";
       default: ERROR("Tipo de expresion invalido");
       }
     return string("INVALID");
@@ -95,13 +95,21 @@ struct Exp : public ASTNode
   void free() { ERROR("Exp: free() method called"); }
 };
 
-struct Shareholder : public Exp
+struct Holding : public Exp
 {
+  using Holder = tuple<string, string, float>;
   const string mapa_name;
-  Exp * rif_exp = nullptr;
   MetaMapa * mapa_ptr = nullptr;
-  Shareholder(const string & mname, Exp * exp) 
-    : Exp(SHAREHOLDER), mapa_name(mname), rif_exp(exp) {}
+  DynList<Holder> socios;
+  void report();
+  Holding(const string & mname) : Exp(HOLDER), mapa_name(mname) {}
+  void free() {}
+};
+
+struct Shareholder : public Holding
+{
+  Exp * rif_exp = nullptr;
+  Shareholder(const string & mname, Exp * exp) : Holding(mname), rif_exp(exp) {}
   ExecStatus execute();
   void free() { if (rif_exp->type != VAR) delete rif_exp; }
 };
