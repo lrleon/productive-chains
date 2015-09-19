@@ -8,11 +8,8 @@ la construcción y análisis de cadenas productivas.
 1. `test`: intérprete de comandos de un lentguaje sencillo para
    construcción y análisis de cadenas productivas. Pare ejecutarlo
    simplemente tipea:
-
        ./test
-
    y el intérprete se ejecutará.
-
 2. `transform-data`: 1ra fase  de conversión de los datos. Esta fase lee
    los archivos en formato csv de la base de datos de sigesic y genera
    los archivos `insumos.txt`, `productos.txt`, `productores.txt`,
@@ -20,7 +17,6 @@ la construcción y análisis de cadenas productivas.
    2012 y se buscan los nombres de las tablas de sigecic. Tipea
    `./transform-data --help` para ver opciones que te permitan modificar
    los nombres de los archivos de entrada y salida así como el año.
-
 3. `transform-dada-2`: 2da fase de conversión de datos. Esta fase lee
    los archivos generados por `transform-data` y genera un único archivo
    con toda la metadata el cual por omisión es llamado `mapa.txt`.
@@ -29,7 +25,29 @@ la construcción y análisis de cadenas productivas.
 ## Requerimientos para compilar
 
 1. Biblioteca `TCLAP`
-2. 
+2. Biblioteca `Aleph-w`
+3. Biblioteca `Readline`
+
+Adicionalmente se requieren `bison` y `flex`
+
+## Instrucciones para compilar
+
+Una vez asegurado que las dependencias estén instaladas, procede a
+editar el `Makefile` para cambiar los directorios de los headers de
+`Aleph-w` y el compilador. Se recomienda LLVM/clang en su última
+versión, pero gcc >= 4.9 deberá compilar sin ningún problema.
+
+Luego de configurado el `Makefile` haz
+
+    make transform-data transform-data-2 test
+
+y listo.
+
+Si quieres generar estos programas optimizados para velocidad y espacio
+haz
+
+    make clean
+    make FLAGS="-O3 -DWITHOUT_NANA -DNDEBUG -std=c++14"
 
    
 
