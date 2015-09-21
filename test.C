@@ -2316,7 +2316,6 @@ int main()
 
        if (status == 0)
 	 {
-	   /* cout << "line correctly parsed" << endl; */
 	   ++i;
 	   if (line_commands != nullptr)
 	     {

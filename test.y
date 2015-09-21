@@ -111,9 +111,19 @@ cmd_unit: EXIT
 	    $$ = new ArcsOutputP($3,$4,$5); 
 	  }
         | PATH VARNAME ref_exp ref_exp { $$ = new ComputePath($2, $3, $4); }
-        | SEARCH SHAREHOLDER VARNAME ref_exp { $$ = new Shareholder($3, $4); }
+        | SEARCH SHAREHOLDER VARNAME ref_exp 
+	  {
+	    $$ = new ShareholderRif($3, $4); 
+	  }
+        | SEARCH SHAREHOLDER REGEX VARNAME ref_exp 
+	  {
+	    $$ = new ShareholderRegex($4,$5); 
+	  }
         | SEARCH HOLDING VARNAME ref_exp { $$ = new HoldigRif($3, $4); }
-        | SEARCH HOLDING REGEX VARNAME ref_exp { $$ = new HoldingRegex($4,$5); }
+        | SEARCH HOLDING REGEX VARNAME ref_exp 
+	  {
+	    $$ = new HoldingRegex($4, $5); 
+	  }
         | RM ARC VARNAME ref_exp ref_exp 
 	  {
 	    $$ = new RmArcNodes($3, $4, $5); 
@@ -2165,7 +2175,7 @@ ExecStatus RanksExp::execute()
   return make_pair(true, "");
 }
 
-void Holder::report()
+void Shareholder::report()
 {
   using Line = tuple<string, string, string>;
   auto l = lista.map<Line>([this] (auto p)
@@ -2192,7 +2202,7 @@ void Holder::report()
     });
 }
 
-ExecStatus Shareholder::execute()
+ExecStatus ShareholderRif::execute()
 {
   {
     auto p = semant_mapa(mapa_name);
@@ -2202,7 +2212,7 @@ ExecStatus Shareholder::execute()
   }
 
   Productor * producer_ptr = nullptr;
-  auto p = semant_producer(mapa_ptr, rif_exp, producer_ptr);
+  auto p = semant_producer(mapa_ptr, producer_exp, producer_ptr);
   if (not p.first)
     return p;
 
@@ -2219,7 +2229,7 @@ ExecStatus Shareholder::execute()
   return make_pair(true, "");
 }
 
-ExecStatus HoldingRegex::execute()
+ExecStatus ShareholderRegex::execute()
 {
   {
     auto p = semant_mapa(mapa_name);
@@ -2238,13 +2248,17 @@ ExecStatus HoldingRegex::execute()
       auto producers = mapa_ptr->producers_by_name(str);
       producers.for_each([this] (auto producer_ptr)
         {
+	  cout << "Shareholder " << producer_ptr->rif << " " 
+	       << producer_ptr->nombre << " :" << endl;
 	  producer_ptr->socios.for_each([this] (auto p)
             {
 	      auto socio = mapa_ptr->tabla_socios(p.first);
 	      lista.append(make_tuple(p.first, socio->nombre, p.second));
 	    });
+	  report();
+	  cout << endl;
+	  lista.empty();
 	});
-      report();
       return make_pair(true, "");
     }
   catch (regex_error & e)
@@ -2253,6 +2267,33 @@ ExecStatus HoldingRegex::execute()
     }
   
   return make_pair(true, "");
+}
+
+void Holder::report()
+{
+  using Line = tuple<string, string, string>;
+  auto l = lista.map<Line>([this] (auto p)
+       {
+	 auto prod_ptr = mapa_ptr->tabla_productores(get<0>(p));
+	 return make_tuple(get<0>(p), prod_ptr->nombre, to_string(get<2>(p)));
+       });
+
+  using Lens = tuple<size_t, size_t, size_t>;
+  auto lens = l.foldl<Lens>(make_tuple(0, 0, 0), [] (auto acu, auto p)
+    {
+      return make_tuple(max(get<0>(acu), get<0>(p).size()),
+			max(get<1>(acu), get<1>(p).size()),
+			max(get<2>(acu), get<2>(p).size()));
+    });
+  
+  l.for_each([&lens] (auto p)
+    {
+      const string blanks0(get<0>(lens) - get<0>(p).size(), ' ');
+      const string blanks1(get<1>(lens) - get<1>(p).size(), ' ');
+      const string blanks2(get<2>(lens) - get<2>(p).size(), ' ');
+      cout << blanks0 << get<0>(p) << " " << blanks1 << get<1>(p) 
+	   << " " << blanks2 << get<2>(p) << endl;
+    });
 }
 
 ExecStatus HoldigRif::execute()
@@ -2277,13 +2318,59 @@ ExecStatus HoldigRif::execute()
       s << "Rif " << rif << " not found";
       return make_pair(false, s.str());
     }
-  cout << "Holdings for " << rif << ptr->nombre << ":" << endl;
+  cout << "Holdings for " << rif << " " << ptr->nombre << ":" << endl;
   lista = ptr->empresas.map<Desc>([this] (auto p)
     {
       auto producer_ptr = mapa_ptr->tabla_productores(p.first);
       assert(producer_ptr);
       return make_tuple(p.first, producer_ptr->nombre, p.second);
     });
+  report();
+
+  return make_pair(true, "");
+}
+
+ExecStatus HoldingRegex::execute()
+{
+  {
+    auto p = semant_mapa(mapa_name);
+    if (not p.first.first)
+      return p.first;
+    mapa_ptr = p.second;
+  }
+
+  auto p = semant_string(str_exp);
+  if (not p.first.first)
+    return p.first;
+
+  const string & str = p.second;
+
+  try
+    {
+      regex reg(str);
+      mapa_ptr->tabla_socios.for_each([&reg, this] (auto socio)
+        {
+	  if (not regex_search(socio.nombre, reg))
+	    return;
+	  cout << "Holdings for " << socio.rif << " " << socio.nombre
+	       << " :" << endl;
+	  socio.empresas.for_each([this] (auto p)
+            {
+	      lista.append(make_tuple(p.first, "", p.second));
+	    });
+	  report();
+	  cout << endl;
+	  lista.empty();
+	});
+    }
+  catch (regex_error & e)
+    {
+      stringstream s;
+      s << "Regular expression " << str << " " << e.what();
+      return make_pair(false, s.str());
+    }
+
+  cout << "Holdings reports for regex " << str << " :" << endl;
   report();
 
   return make_pair(true, "");

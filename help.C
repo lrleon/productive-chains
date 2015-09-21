@@ -282,6 +282,38 @@ R"(Elimina un arco de una red.
    variable nodo.
    )";
 
+static const char * shareholder_help =
+R"(Reporte de accionistas por empresa
+
+       search shareholder <mapa-var> <producer-exp>
+
+   Proporciona la lista de accionistas de la empresa <producer-exp> en el 
+   mapa <mapa-var>. <producer-var> pruede ser una cadena con el rif 
+   (constante o variable), una variable productor o una variable nodo.  
+
+
+       search shareholder regex <mapa-var> <reg-exp>
+
+   Proporciona los accionistas vinculados a las empresas del mapa <map-var>
+   cuyo nombre corresponda con la expresión regular <reg-exp>
+   )";
+
+static const char * holder_help =
+R"(Reporte de empresas por accionista
+
+       search holding <mapa-var> <shareholder-exp>
+
+   Proporciona la lista de empresas del mapa <mapa-var> poseídas por el
+   propietario <shareholder-exp>. <shareholder-exp> debe ser una cadena 
+   (constante o variable) con el rif del propietario.
+
+
+       search holding regex <mapa-var> <reg-exp>
+
+   Porporciona la lista de accionistas que correspondan con la expresión 
+   regular <reg-exp> y las empresas sobre las cuales estos ejercen propiedad.
+   )";
+
 ExecStatus Help::execute()
 {
   cout << endl;
@@ -303,6 +335,8 @@ ExecStatus Help::execute()
     case PATH: cout << path_help << endl; break;
     case RMARC: cout << rmarc_help << endl; break;
     case RMNODE: cout << rmnode_help << endl; break;
+    case SHAREHOLDER: cout << shareholder_help << endl; break;
+    case HOLDER: cout << holder_help << endl; break;
     default: cout << "No help topic" << endl; break;
     }
   return make_pair(true, "");

@@ -43,8 +43,8 @@ struct Exp : public ASTNode
 	      SEARCHPRODUCER, APPEND, LISTREAD, LISTWRITE, SEARCHPRODUCERREGEX,
 	      SEARCHPRODUCTID, SEARCHPRODUCTREGEX, SEARCHPRODUCTCOD,
 	      SEARCHPRODUCTRIF, SEARCHNODE, NODE, COVER, REACHABLE,
-	      UPSTREAM, INPUTS, ARCS, SAVE, PATH, RANKS, HOLDER, RMARC,
-	      RMNODE,
+	      UPSTREAM, INPUTS, ARCS, SAVE, PATH, RANKS, SHAREHOLDER, RMARC,
+	      RMNODE, HOLDER, HEGEMONY,
 	      TYPEINFO, HELP, DOT, BLOCKS, ERROR } type;
 
   string type_string() const
@@ -83,6 +83,8 @@ struct Exp : public ASTNode
       case PATH: return "PATH";
       case RANKS: return "RANKS";
       case HOLDER: return "HOLDER";
+      case SHAREHOLDER: return "SHAREHOLDER";
+      case HEGEMONY: return "HEGEMONY";
       case RMARC: return "RMARC";
       case RMNODE: return "RMNODE";
       default: ERROR("Tipo de expresion invalido");
@@ -143,32 +145,44 @@ struct RmArcId : public Exp
   void free() { if (id_exp->type != VAR) delete id_exp; }
 };
 
-struct Holder : public Exp
+struct Shareholder : public Exp
+{                // rif-socio, nombre-socio, %
+  using Desc = tuple<string, string, float>;
+  const string mapa_name;
+  MetaMapa * mapa_ptr = nullptr;
+  DynList<Desc> lista;
+  void report();
+  Shareholder(const string & mname) : Exp(SHAREHOLDER), mapa_name(mname) {}
+  void free() {}
+};
+
+struct ShareholderRif : public Shareholder
 {
+  Exp * producer_exp = nullptr;
+  Productor * producer_ptr = nullptr;
+  ShareholderRif(const string & mname, Exp * exp) 
+    : Shareholder(mname), producer_exp(exp) {}
+  ExecStatus execute();
+  void free() { if (producer_exp->type != VAR) delete producer_exp; }
+};
+
+struct ShareholderRegex : public Shareholder
+{
+  Exp * regex_exp = nullptr;
+  ShareholderRegex(const string & mname, Exp * exp) 
+    : Shareholder(mname), regex_exp(exp) {}
+  ExecStatus execute();
+  void free() { if (regex_exp->type != VAR) delete regex_exp; }
+};
+
+struct Holder : public Exp
+{              // rif-empresa, nombre-empresa, %
   using Desc = tuple<string, string, float>;
   const string mapa_name;
   MetaMapa * mapa_ptr = nullptr;
   DynList<Desc> lista;
   void report();
   Holder(const string & mname) : Exp(HOLDER), mapa_name(mname) {}
-  void free() {}
-};
-
-struct Shareholder : public Holder
-{
-  Exp * rif_exp = nullptr;
-  Shareholder(const string & mname, Exp * exp) : Holder(mname), rif_exp(exp) {}
-  ExecStatus execute();
-  void free() { if (rif_exp->type != VAR) delete rif_exp; }
-};
-
-struct HoldingRegex : public Holder
-{
-  Exp * regex_exp = nullptr;
-  HoldingRegex(const string & mname, Exp * exp) 
-    : Holder(mname), regex_exp(exp) {}
-  ExecStatus execute();
-  void free() { if (regex_exp->type != VAR) delete regex_exp; }
 };
 
 struct HoldigRif : public Holder
@@ -177,6 +191,15 @@ struct HoldigRif : public Holder
   HoldigRif(const  string & mname, Exp * exp) : Holder(mname), rif_exp(exp) {}
   ExecStatus execute();
   void free() { if (rif_exp->type != VAR) delete rif_exp; }
+};
+
+struct HoldingRegex : public Holder
+{
+  Exp * str_exp = nullptr;
+  HoldingRegex(const  string & mname, Exp * exp) 
+    : Holder(mname), str_exp(exp) {}
+  ExecStatus execute();
+  void free() { if (str_exp->type != VAR) delete str_exp; }
 };
 
 struct ErrorExp : Exp
