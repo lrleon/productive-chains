@@ -5,5 +5,5 @@
 
 2. Terminar estudios de hegemonía
 
-3. Modificar dot para que acepte un mapa o una red
+
 

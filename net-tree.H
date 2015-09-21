@@ -907,7 +907,8 @@ struct Dot : public Exp
 {
   const string net_name;
   Exp * file_exp = nullptr;
-  VarNet * varnet  = nullptr;
+  MetaMapa * mapa_ptr = nullptr;
+  Net * net_ptr  = nullptr;
   string file_name;
   Dot(const string & name, Exp * str_exp) 
     : Exp(DOT), net_name(name), file_exp(str_exp) {}

@@ -1616,11 +1616,9 @@ ExecStatus UpstreamB::execute()
 
 ExecStatus Dot::execute()
 {
-  auto r = semant_net(net_name);
-  if (not r.first.first)
-    return r.first;
-
-  varnet = r.second;
+  auto r = semant_mapa_or_net(net_name, mapa_ptr, net_ptr);
+  if (not r.first)
+    return r;
 
   auto res = ::semant_string(file_exp);
   if (not res.first.first)
@@ -1636,8 +1634,8 @@ ExecStatus Dot::execute()
       return make_pair(false, s.str());
     }
 
-  Write_Arc warc(varnet->mapa_ptr->tabla_insumos);
-  To_Graphviz<Net, Write_Node, Write_Arc>().digraph(varnet->net, out, 
+  Write_Arc warc(mapa_ptr->tabla_insumos);
+  To_Graphviz<Net, Write_Node, Write_Arc>().digraph(*net_ptr, out, 
 						    Write_Node(), warc, "LR");
 
   free();
