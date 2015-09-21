@@ -37,7 +37,7 @@
 %token LOAD SAVE EXIT ERROR INFO LS RM SEARCH PRODUCER PRODUCERS LIST APPEND
 %token PRODUCT ID REGEX HELP COD TYPEINFO RIF NODE REACHABLE COVER DOT UPSTREAM
 %token INPUTS ARCS OUTPUTS PATH INPUT OUTPUT RANKS SHAREHOLDER HOLDING
-%token <symbol> STRCONST INTCONST VARNAME 
+%token <symbol> STRCONST INTCONST VARNAME ARC
 
 %type <expr> exp
 %type <expr> rvalue
@@ -114,7 +114,13 @@ cmd_unit: EXIT
         | SEARCH SHAREHOLDER VARNAME ref_exp { $$ = new Shareholder($3, $4); }
         | SEARCH HOLDING VARNAME ref_exp { $$ = new HoldigRif($3, $4); }
         | SEARCH HOLDING REGEX VARNAME ref_exp { $$ = new HoldingRegex($4,$5); }
+        | RM ARC VARNAME ref_exp ref_exp 
+	  {
+	    $$ = new RmArcNodes($3, $4, $5); 
+	  }
+        | RM ARC VARNAME ref_exp { $$ = new RmArcId($3, $4); }
 ;
+
 
 help_exp: HELP           { $$ = new Help; }
         | HELP LOAD      { $$ = new Help(Exp::Type::MAP); }
@@ -196,8 +202,8 @@ exp : LOAD ref_exp { $$ = new Load(static_cast<StringExp*>($2)); }
     | SEARCH PRODUCT COD VARNAME ref_exp { $$ = new SearchProductsCod($4, $5); }
     | SEARCH PRODUCT RIF VARNAME ref_exp { $$ = new SearchProductsRif($4, $5); }
     | SEARCH NODE VARNAME ref_exp { $$ = new SearchNode($3, $4); }
-    | COVER VARNAME VARNAME { $$ = new Cover($2, $3); }
-    | UPSTREAM VARNAME VARNAME ref_exp ref_exp
+    | COVER VARNAME ref_exp { $$ = new Cover($2, $3); }
+    | UPSTREAM VARNAME ref_exp ref_exp ref_exp
       {
 	$$ = new UpstreamB($2, $3, $4, $5);
       }
@@ -674,6 +680,132 @@ static pair<ExecStatus, MetaMapa*> semant_mapa(const string & mapa_name)
   MetaMapa * mapa_ptr = &ptr->value;
 
   return make_pair(make_pair(true, ""), mapa_ptr);
+}
+
+static ExecStatus semant_producer(MetaMapa * mapa_ptr, 
+				  Exp * producer_exp, 
+				  Productor *& producer_ptr)
+{
+  auto r = producer_exp->execute();
+  if (not r.first)
+    return r;
+
+  stringstream s;
+  switch (producer_exp->type)
+    {
+    case Exp::STRCONST:
+      {
+	const auto & rif = static_cast<StringExp*>(producer_exp)->value;
+	producer_ptr = mapa_ptr->tabla_productores(rif);
+	if (producer_ptr == nullptr)
+	  {
+	    s << "producer rif " << rif << " not found";
+	    return make_pair(false, s.str());
+	  }
+	break;
+      }
+    case Exp::VAR:
+      {
+	auto varname = static_cast<Varname*>(producer_exp);
+	auto var = varname->get_value_ptr();
+	if (var == nullptr)
+	  {
+	    s << "var name " << varname->name << " has not a value" << endl
+	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
+	    return make_pair(false, s.str());
+	  }
+	switch (var->var_type)
+	  {
+	  case Var::VarType::String:
+	    {
+	      const auto & rif = static_cast<VarString*>(var)->value;
+	      producer_ptr = mapa_ptr->tabla_productores(rif);
+	      if (producer_ptr == nullptr)
+		{
+		  s << "producer rif " << rif << " not found";
+		  return make_pair(false, s.str());
+		}
+	      break;
+	    }
+	  case Var::VarType::Producer:
+	    producer_ptr = &static_cast<VarProducer*>(var)->productor;
+	    break;
+	  default:
+	    s << "var " << varname->name << " is not a producer or string type";
+	    return make_pair(false, s.str());
+	  }
+	break;
+      }
+    default:
+      s << "Producer expression is not a string with a rif neither a "
+	<< "producer var";
+    return make_pair(false, s.str());
+    }
+
+  return make_pair(true, "");
+}
+
+static ExecStatus semant_product(MetaMapa * mapa_ptr, 
+				 Exp * product_exp, 
+				 MetaProducto *& product_ptr)
+{
+  auto r = product_exp->execute();
+  if (not r.first)
+    return r;
+
+  stringstream s;
+  switch (product_exp->type)
+    {
+    case Exp::INTCONST:
+      {
+	const auto id = static_cast<IntExp*>(product_exp)->value;
+	product_ptr = mapa_ptr->tabla_productos(id);
+	if (product_ptr == nullptr)
+	  {
+	    s << "product id " << id << " not found";
+	    return make_pair(false, s.str());
+	  }
+	break;
+      }
+    case Exp::VAR:
+      {
+	auto varname = static_cast<Varname*>(product_exp);
+	auto var = varname->get_value_ptr();
+	if (var == nullptr)
+	  {
+	    s << "var name " << varname->name << " has not a value" << endl
+	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
+	    return make_pair(false, s.str());
+	  }
+	switch (var->var_type)
+	  {
+	  case Var::VarType::Int:
+	    {
+	      const auto id = static_cast<VarInt*>(var)->value;
+	      product_ptr = mapa_ptr->tabla_productos(id);
+	      if (product_ptr == nullptr)
+		{
+		  s << "product id " << id << " not found";
+		  return make_pair(false, s.str());
+		}
+	    break;
+	    }
+	  case Var::VarType::Product:
+	    product_ptr = &static_cast<VarProduct*>(var)->product;
+	    break;
+	  default:
+	    s << "var " << varname->name << " is not a product or integer type";
+	    return make_pair(false, s.str());
+	  }
+	break;
+      }
+    default:
+      s << "Producer expression is not a string with a rif neither a "
+	<< "producer var";
+    return make_pair(false, s.str());
+    }
+
+  return make_pair(true, "");
 }
 
 ExecStatus Search::semant_mapa() 
@@ -1394,21 +1526,9 @@ ExecStatus SubNet::semant()
   
   mapa_ptr = p.second;
   
-  stringstream s;
-  auto varname = var_tbl(node_name);
-  if (varname == nullptr)
-    {
-      s << "Var node: " << node_name << " not found";
-      return make_pair(false, s.str());
-    }
-  auto var = static_cast<VarNode*>(varname->get_value_ptr());
-  if (var->var_type != Var::VarType::Node)
-    {
-      s << "Var node: " << varname->name << " is not a node";
-      return make_pair(false, s.str());
-    }
-
-  src = var->node_ptr;
+  auto rnode = semant_node_exp(node_exp, mapa_ptr, src);
+  if (not rnode.first)
+    return rnode;
 
   return make_pair(true, "");
 }
@@ -1425,131 +1545,24 @@ ExecStatus Cover::execute()
   return make_pair(true, "");
 }
 
-ExecStatus UpstreamF::semant()
+ExecStatus UpstreamB::execute()
 {
   auto r = SubNet::semant();
   if (not r.first)
     return r;
 
-  stringstream s;
-  r = product_exp->execute();
-  if (not r.first)
-    return r;
+  auto rprod = semant_product(mapa_ptr, product_exp, product_ptr);
+  if (not rprod.first)
+    return rprod;
 
-  switch (product_exp->type)
-    {
-    case INTCONST: // insumo_id
-      {
-	Uid id = static_cast<IntExp*>(product_exp)->value;
-	producto_ptr = mapa_ptr->tabla_productos(id);
-	if (producto_ptr == nullptr)
-	  {
-	    s << "Product id " << id << " not found";
-	    return make_pair(false, s.str());
-	  }
-	break;
-      }
-    case VAR:
-      {
-	auto varname = static_cast<Varname*>(product_exp);
-	auto var = varname->get_value_ptr();
-	if (var == nullptr)
-	  {
-	    s << "var name " << varname->name << " has not a value" << endl
-	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
-	    return make_pair(false, s.str());
-	  }
-	switch (var->var_type)
-	  {
-	  case Var::VarType::Int: 
-	    {
-	      Uid id = static_cast<VarInt*>(var)->value;
-	      producto_ptr = mapa_ptr->tabla_productos(id);
-	      if (producto_ptr == nullptr)
-		{
-		  s << "Product id " << id << " contained in var "
-		    << varname->name << " not found";
-		  return make_pair(false, s.str());
-		}
-	      break;
-	    }
-	  case Var::VarType::Product: 
-	    producto_ptr = &static_cast<VarProduct*>(var)->product;
-	    break;
-	  default:
-	    s << "Var " << varname->name << " is not integer or product";
-	    return make_pair(false, s.str());
-	  }
+  auto rid = semant_int(threshold_exp);
+  if (not rid.first.first)
+    return rid.first;
 
-	break;
-      }
-    default:
-      s << "Upstream> productor exp is invalid. This is possibly a buf" << endl
-	<< "Please report it";
-      return make_pair(false, s.str());
-    }
-
-  auto productor_ptr = src->get_info();
-  const string & cod_aran = producto_ptr->cod_aran;
-  if (not productor_ptr->productos.exists([&cod_aran] (auto p)
-					  {
-					    return p.second == cod_aran;
-					  }))
-    {
-      s << "Codigo arancelario de producto " << producto_ptr->id << " "
-	<< cod_aran << " (" << producto_ptr->nombre << ")" << endl
-	<< "no está entre los productos del productor " << node_name;
-      return make_pair(false, s.str());
-    }
-  
-  return make_pair(true, "");
-}
-
-ExecStatus UpstreamB::execute()
-{
-  auto r = semant();
-  if (not r.first)
-    return r;
-
-  auto tmp = static_cast<IntExp*>(threshold_exp);
-  cout << tmp->type_string() << endl
-       << tmp->value << endl;
-
-  r = threshold_exp->execute();
-  if (not r.first)
-    return r;
-
-  stringstream s;
-  switch (threshold_exp->type)
-    {
-    case INTCONST:
-      threshold = static_cast<IntExp*>(threshold_exp)->value;
-      break;
-    case VAR:
-      {
-	auto varname = static_cast<Varname*>(threshold_exp);
-	auto var = static_cast<VarInt*>(varname->get_value_ptr());
-	if (var == nullptr)
-	  {
-	    s << "var name " << varname->name << " has not a value" << endl
-	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
-	    return make_pair(false, s.str());
-	  }
-	if (var->var_type != Var::VarType::Int)
-	  {
-	    s << "var name " << varname->name << " is an integer";
-	    return make_pair(false, s.str());
-	  }
-	threshold = var->value;
-	break;
-      }
-    default:
-      s << "Threshold for edit distance is not an integer expression";
-      return make_pair(false, s.str());
-    }
+  threshold = rid.second;
 
   cout << "Building upstream net from " << *src->get_info() << endl;
-  net = mapa_ptr->upstream_best(src, producto_ptr, threshold);
+  net = mapa_ptr->upstream_best(src, product_ptr, threshold);
   cout << "done!";
 
   free();
@@ -1600,7 +1613,7 @@ ExecStatus Dot::execute()
 
   Write_Arc warc(varnet->mapa_ptr->tabla_insumos);
   To_Graphviz<Net, Write_Node, Write_Arc>().digraph(varnet->net, out, 
-						    Write_Node(), warc);
+						    Write_Node(), warc, "LR");
 
   free();
   return make_pair(true, "");
@@ -1863,132 +1876,6 @@ ExecStatus ArcsOutputId::execute()
     });
 
   report();
-
-  return make_pair(true, "");
-}
-
-static ExecStatus semant_producer(MetaMapa * mapa_ptr, 
-				  Exp * producer_exp, 
-				  Productor *& producer_ptr)
-{
-  auto r = producer_exp->execute();
-  if (not r.first)
-    return r;
-
-  stringstream s;
-  switch (producer_exp->type)
-    {
-    case Exp::STRCONST:
-      {
-	const auto & rif = static_cast<StringExp*>(producer_exp)->value;
-	producer_ptr = mapa_ptr->tabla_productores(rif);
-	if (producer_ptr == nullptr)
-	  {
-	    s << "producer rif " << rif << " not found";
-	    return make_pair(false, s.str());
-	  }
-	break;
-      }
-    case Exp::VAR:
-      {
-	auto varname = static_cast<Varname*>(producer_exp);
-	auto var = varname->get_value_ptr();
-	if (var == nullptr)
-	  {
-	    s << "var name " << varname->name << " has not a value" << endl
-	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
-	    return make_pair(false, s.str());
-	  }
-	switch (var->var_type)
-	  {
-	  case Var::VarType::String:
-	    {
-	      const auto & rif = static_cast<VarString*>(var)->value;
-	      producer_ptr = mapa_ptr->tabla_productores(rif);
-	      if (producer_ptr == nullptr)
-		{
-		  s << "producer rif " << rif << " not found";
-		  return make_pair(false, s.str());
-		}
-	      break;
-	    }
-	  case Var::VarType::Producer:
-	    producer_ptr = &static_cast<VarProducer*>(var)->productor;
-	    break;
-	  default:
-	    s << "var " << varname->name << " is not a producer or string type";
-	    return make_pair(false, s.str());
-	  }
-	break;
-      }
-    default:
-      s << "Producer expression is not a string with a rif neither a "
-	<< "producer var";
-    return make_pair(false, s.str());
-    }
-
-  return make_pair(true, "");
-}
-
-static ExecStatus semant_product(MetaMapa * mapa_ptr, 
-				 Exp * product_exp, 
-				 MetaProducto *& product_ptr)
-{
-  auto r = product_exp->execute();
-  if (not r.first)
-    return r;
-
-  stringstream s;
-  switch (product_exp->type)
-    {
-    case Exp::INTCONST:
-      {
-	const auto id = static_cast<IntExp*>(product_exp)->value;
-	product_ptr = mapa_ptr->tabla_productos(id);
-	if (product_ptr == nullptr)
-	  {
-	    s << "product id " << id << " not found";
-	    return make_pair(false, s.str());
-	  }
-	break;
-      }
-    case Exp::VAR:
-      {
-	auto varname = static_cast<Varname*>(product_exp);
-	auto var = varname->get_value_ptr();
-	if (var == nullptr)
-	  {
-	    s << "var name " << varname->name << " has not a value" << endl
-	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
-	    return make_pair(false, s.str());
-	  }
-	switch (var->var_type)
-	  {
-	  case Var::VarType::Int:
-	    {
-	      const auto id = static_cast<VarInt*>(var)->value;
-	      product_ptr = mapa_ptr->tabla_productos(id);
-	      if (product_ptr == nullptr)
-		{
-		  s << "product id " << id << " not found";
-		  return make_pair(false, s.str());
-		}
-	    break;
-	    }
-	  case Var::VarType::Product:
-	    product_ptr = &static_cast<VarProduct*>(var)->product;
-	    break;
-	  default:
-	    s << "var " << varname->name << " is not a product or integer type";
-	    return make_pair(false, s.str());
-	  }
-	break;
-      }
-    default:
-      s << "Producer expression is not a string with a rif neither a "
-	<< "producer var";
-    return make_pair(false, s.str());
-    }
 
   return make_pair(true, "");
 }
@@ -2376,5 +2263,98 @@ ExecStatus HoldigRif::execute()
     });
   report();
 
+  return make_pair(true, "");
+}
+
+ExecStatus RmArcNodes::execute()
+{
+  stringstream s;
+  auto p = ::semant_mapa(vname);
+  if (p.first.first)
+    {
+      mapa_ptr = p.second;
+      net_ptr = &mapa_ptr->net;
+    }
+  else 
+    {
+      auto rnet = semant_net(vname);
+      if (not rnet.first.first)
+	{
+	  s << vname << " is not a name of map or net variable";
+	  return make_pair(false, s.str());
+	}
+      net_ptr = &rnet.second->net;
+      mapa_ptr = rnet.second->mapa_ptr;
+    }
+
+  auto r = semant_node_exp(src_exp, mapa_ptr, src);
+  if (not r.first)
+    return r;
+
+  r = semant_node_exp(tgt_exp, mapa_ptr, tgt);
+  if (not r.first)
+    return r;
+
+  
+  auto arc = net_ptr->search_directed_arc(src, tgt);
+  if (arc == nullptr)
+    {
+      s << "Arc " << src->get_info()->rif << " --> " << tgt->get_info()->rif
+	<< " not found";
+      return make_pair(false, s.str());
+    }
+  
+  cout << "Removing arc " << src->get_info()->rif << " [" << arc->get_info() 
+       << "] " << tgt->get_info()->rif << endl;
+  net_ptr->remove_arc(arc);
+
+  free();
+  return make_pair(true, "");
+}
+
+ExecStatus RmArcId::execute()
+{
+  stringstream s;
+  auto p = ::semant_mapa(vname);
+  if (p.first.first)
+    {
+      mapa_ptr = p.second;
+      net_ptr = &mapa_ptr->net;
+    }
+  else 
+    {
+      auto rnet = semant_net(vname);
+      if (not rnet.first.first)
+	{
+	  s << vname << " is not a name of map or net variable";
+	  return make_pair(false, s.str());
+	}
+      net_ptr = &rnet.second->net;
+      mapa_ptr = rnet.second->mapa_ptr;
+    }
+
+  auto pi = semant_int(id_exp);
+  if (not pi.first.first)
+    return pi.first;
+
+  arc_id = pi.second;
+
+  cout << "Searching arc with id = " << arc_id << endl;
+  auto arc = net_ptr->search_arc([this] (auto a) 
+    {
+      return a->get_info().arco_id == arc_id;
+    });
+  
+  if (arc == nullptr)
+    {
+      s << "arc id " << arc_id << " not found";
+      return make_pair(false, s.str());
+    }
+
+  cout << "Removing arc " << net_ptr->get_src_node(arc)->get_info()->rif 
+       << " [" << arc->get_info() << "] " 
+       << net_ptr->get_tgt_node(arc)->get_info()->rif << endl;
+  net_ptr->remove_arc(arc);
+  
   return make_pair(true, "");
 }

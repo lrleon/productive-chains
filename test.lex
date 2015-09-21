@@ -24,7 +24,7 @@
 
   StringTable string_table;
   IdTable id_table;
-
+ 
 /* Max size of string constants */
 # define MAX_STR_CONST 4097
 # define MAX_CWD_SIZE 4097
@@ -88,6 +88,7 @@ PATH         [pP][aA][tT][hH]
 RANKS        [rR][aA][nN][kK][sS]
 SHAREHOLDER  [sS][hH][aA][rR][eE][hH][oO][lL][dD][eE][rR]
 HOLDING      [hH][oO][lL][dD][iI][nN][gG]
+ARC          [aA][rR][cC]
 
 SPACE           [ \f\r\t\v]
 
@@ -136,6 +137,7 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
 {RANKS}      return RANKS;
 {SHAREHOLDER} return SHAREHOLDER;
 {HOLDING}    return HOLDING;
+{ARC}        return ARC;
 
  /*
   * The single-characters tokens 

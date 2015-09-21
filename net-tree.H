@@ -43,7 +43,7 @@ struct Exp : public ASTNode
 	      SEARCHPRODUCER, APPEND, LISTREAD, LISTWRITE, SEARCHPRODUCERREGEX,
 	      SEARCHPRODUCTID, SEARCHPRODUCTREGEX, SEARCHPRODUCTCOD,
 	      SEARCHPRODUCTRIF, SEARCHNODE, NODE, COVER, REACHABLE,
-	      UPSTREAM, INPUTS, ARCS, SAVE, PATH, RANKS, HOLDER,
+	      UPSTREAM, INPUTS, ARCS, SAVE, PATH, RANKS, HOLDER, RMARC,
 	      TYPEINFO, HELP, DOT, BLOCKS, ERROR } type;
 
   string type_string() const
@@ -82,6 +82,7 @@ struct Exp : public ASTNode
       case PATH: return "PATH";
       case RANKS: return "RANKS";
       case HOLDER: return "HOLDER";
+      case RMARC: return "RMARC";
       default: ERROR("Tipo de expresion invalido");
       }
     return string("INVALID");
@@ -93,6 +94,38 @@ struct Exp : public ASTNode
     ERROR("Epx: execute method called"); return ExecStatus(); 
   }
   void free() { ERROR("Exp: free() method called"); }
+};
+
+struct RmArcNodes : public Exp
+{
+  const string vname;
+  Exp * src_exp = nullptr;
+  Exp * tgt_exp = nullptr;
+  MetaMapa * mapa_ptr = nullptr;
+  Net * net_ptr = nullptr;
+  Net::Node * src = nullptr;
+  Net::Node * tgt = nullptr;
+  RmArcNodes(const string & name, Exp * sexp, Exp * texp) 
+    : Exp(RMARC), vname(name), src_exp(sexp), tgt_exp(texp) {}
+  ExecStatus execute();
+  void free()
+  {
+    if (src_exp->type != VAR) delete src_exp; 
+    if (tgt_exp->type != VAR) delete tgt_exp; 
+  }
+};
+
+struct RmArcId : public Exp
+{
+  const string vname;
+  Exp * id_exp = nullptr;
+  MetaMapa * mapa_ptr = nullptr;
+  Net * net_ptr = nullptr;
+  Uid arc_id;
+  RmArcId(const string & name, Exp * exp) 
+    : Exp(RMARC), vname(name), id_exp(exp) {}
+  ExecStatus execute();
+  void free() { if (id_exp->type != VAR) delete id_exp; }
 };
 
 struct Holder : public Exp
@@ -433,41 +466,33 @@ struct Connected : public Exp
 struct SubNet : public Exp
 {
   const string mapa_name;
-  const string node_name;
+  Exp * node_exp = nullptr;
   MetaMapa * mapa_ptr = nullptr;
   Net::Node * src = nullptr;
   Net net;
-
-  SubNet(Exp::Type type, const string & mapa, const string & node) 
-    : Exp(type), mapa_name(mapa), node_name(node) {}
+  SubNet(Exp::Type type, const string & mapa, Exp * exp) 
+    : Exp(type), mapa_name(mapa), node_exp(exp) {}
   ExecStatus semant();
 };
 
 struct Cover : public SubNet
 {
-  Cover(const string & mapa_name, const string & node_name) 
-    : SubNet(COVER, mapa_name, node_name) {}
+  Cover(const string & mapa_name, Exp * node_exp) 
+    : SubNet(COVER, mapa_name, node_exp) {}
   ExecStatus execute();
   void free() {}
 };
 
-struct UpstreamF : public SubNet
+struct UpstreamB : public SubNet
 {
   Exp * product_exp = nullptr;
-  MetaProducto * producto_ptr = nullptr;
-  UpstreamF(const string & mapa_name, const string & node_name, Exp * prod_exp) 
-    : SubNet(UPSTREAM, mapa_name, node_name), product_exp(prod_exp) {}
-  ExecStatus semant();
-  void free() { if (product_exp->type != VAR) delete product_exp; }
-};
-
-struct UpstreamB : public UpstreamF
-{
   Exp * threshold_exp = nullptr;
+  MetaProducto * product_ptr = nullptr;
   size_t threshold = 0;
-  UpstreamB(const string & mapa_name, const string & node_name, 
+  UpstreamB(const string & mapa_name, Exp * node_exp, 
 	    Exp * prod_exp, Exp * th_exp) 
-    : UpstreamF(mapa_name, node_name, prod_exp), threshold_exp(th_exp) {}
+    : SubNet(UPSTREAM, mapa_name, node_exp), 
+      product_exp(prod_exp), threshold_exp(th_exp) {}
   ExecStatus execute();
   void free() 
   { 
