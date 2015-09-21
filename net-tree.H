@@ -44,6 +44,7 @@ struct Exp : public ASTNode
 	      SEARCHPRODUCTID, SEARCHPRODUCTREGEX, SEARCHPRODUCTCOD,
 	      SEARCHPRODUCTRIF, SEARCHNODE, NODE, COVER, REACHABLE,
 	      UPSTREAM, INPUTS, ARCS, SAVE, PATH, RANKS, HOLDER, RMARC,
+	      RMNODE,
 	      TYPEINFO, HELP, DOT, BLOCKS, ERROR } type;
 
   string type_string() const
@@ -83,6 +84,7 @@ struct Exp : public ASTNode
       case RANKS: return "RANKS";
       case HOLDER: return "HOLDER";
       case RMARC: return "RMARC";
+      case RMNODE: return "RMNODE";
       default: ERROR("Tipo de expresion invalido");
       }
     return string("INVALID");
@@ -94,6 +96,19 @@ struct Exp : public ASTNode
     ERROR("Epx: execute method called"); return ExecStatus(); 
   }
   void free() { ERROR("Exp: free() method called"); }
+};
+
+struct RmNode : public Exp
+{
+  const string vname;
+  Exp * node_exp = nullptr;
+  MetaMapa * mapa_ptr = nullptr;
+  Net * net_ptr = nullptr;
+  Net::Node * node_ptr = nullptr;
+  RmNode(const string & name, Exp * exp) 
+    : Exp(RMNODE), vname(name), node_exp(exp) {}
+  ExecStatus execute();
+  void free() { if (node_exp->type != VAR) delete node_exp; }
 };
 
 struct RmArcNodes : public Exp

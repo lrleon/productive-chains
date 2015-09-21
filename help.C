@@ -247,13 +247,13 @@ R"(Calcula el camino mínimo (en arcos) entre un par de productores
    inverso; es decir desde <productor-exp-2> hasta <productor-exp-1>.
    )";
 
-static const char * rm_help =
+static const char * rmarc_help =
 R"(Elimina un arco de una red.
 
-       rm arc <mapa-var> <net->var> <src-exp> <tgt_exp>
+       rm arc <var> <net->var> <src-exp> <tgt_exp>
 
-   Elimina de la red <net-var> asociada al mapa <mapa-var> el arco que conecta
-   a los nodos <src-exp> y <tgt-exp>.
+   Elimina del mapa o red <var> el arco que conecta a los nodos
+   <src-exp> y <tgt-exp>.
 
    <src-exp> y <tgt-exp> pueden ser variables o cadenas constantes con rif, 
    variables productor o variables nodo.
@@ -263,13 +263,23 @@ R"(Elimina un arco de una red.
          más precisión
 
    
-       rm arc <mapa-var> <net->var> <id-exp>
+       rm arc <var> <id-exp>
 
-   Elimina de la red <net-var> asociada al mapa <mapa-var> el arco cuyo id
-   sea <id-exp>. <id-exp> debe eser un identificador de arco y puede ser 
-   una constante o variable entera.
+   Elimina del mapa o red <var> el arco cuyo id sea <id-exp>. <id-exp> debe
+   ser un identificador de arco y puede ser una constante o variable entera.
 
    CUIDADO: cualquier método para eliminar arco puede dejar a la red inconexa.
+   )";
+
+static const char * rmnode_help =
+R"(Elimina un arco de una red.
+
+       rm node <var> <node-exp>
+
+   Elimina del mapa o red <var> el nodo <node-exp>.
+
+   <node-exp> puede ser una cadena con el rif, una variable productor o una 
+   variable nodo.
    )";
 
 ExecStatus Help::execute()
@@ -291,7 +301,8 @@ ExecStatus Help::execute()
     case INPUTS: cout << inputs << endl; break;
     case ARCS: cout << arcs_help << endl; break;
     case PATH: cout << path_help << endl; break;
-    case RMARC: cout << rm_help << endl; break;
+    case RMARC: cout << rmarc_help << endl; break;
+    case RMNODE: cout << rmnode_help << endl; break;
     default: cout << "No help topic" << endl; break;
     }
   return make_pair(true, "");

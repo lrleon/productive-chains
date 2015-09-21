@@ -119,6 +119,7 @@ cmd_unit: EXIT
 	    $$ = new RmArcNodes($3, $4, $5); 
 	  }
         | RM ARC VARNAME ref_exp { $$ = new RmArcId($3, $4); }
+        | RM NODE VARNAME ref_exp { $$ = new RmNode($3, $4); }
 ;
 
 
@@ -887,6 +888,50 @@ ExecStatus SearchProducerRif::semant()
   return make_pair(true, "");
 }
 
+static pair<ExecStatus, VarNet*> semant_net(const string & net_name)
+{
+  stringstream s;
+  auto varname = var_tbl(net_name);
+  if (varname == nullptr)
+    {
+      s << "Var net " << net_name << " not found";
+      return make_pair(make_pair(false, s.str()), nullptr);
+    }
+
+  auto varnet = static_cast<VarNet*>(varname->get_value_ptr());
+  if (varnet->var_type != Var::VarType::Cover)
+    {
+      s << "Var " << net_name << " is not a net type";
+      return make_pair(make_pair(false, s.str()), nullptr);
+    }
+
+  return make_pair(make_pair(true, ""), varnet);
+}
+
+static ExecStatus semant_mapa_or_net(const string & name, 
+				     MetaMapa *& mapa_ptr, Net *& net_ptr)
+{
+  stringstream s;
+  auto p = ::semant_mapa(name);
+  if (p.first.first)
+    {
+      mapa_ptr = p.second;
+      net_ptr = &mapa_ptr->net;
+    }
+  else 
+    {
+      auto rnet = semant_net(name);
+      if (not rnet.first.first)
+	{
+	  s << name << " is not a name of map or net variable";
+	  return make_pair(false, s.str());
+	}
+      net_ptr = &rnet.second->net;
+      mapa_ptr = rnet.second->mapa_ptr;
+    }
+  return make_pair(true, "");
+}
+
 ExecStatus Append::execute()
 {
   stringstream s;
@@ -1569,26 +1614,6 @@ ExecStatus UpstreamB::execute()
   return make_pair(true, "");
 }
 
-static pair<ExecStatus, VarNet*> semant_net(const string & net_name)
-{
-  stringstream s;
-  auto varname = var_tbl(net_name);
-  if (varname == nullptr)
-    {
-      s << "Var net " << net_name << " not found";
-      return make_pair(make_pair(false, s.str()), nullptr);
-    }
-
-  auto varnet = static_cast<VarNet*>(varname->get_value_ptr());
-  if (varnet->var_type != Var::VarType::Cover)
-    {
-      s << "Var " << net_name << " is not a net type";
-      return make_pair(make_pair(false, s.str()), nullptr);
-    }
-
-  return make_pair(make_pair(true, ""), varnet);
-}
-
 ExecStatus Dot::execute()
 {
   auto r = semant_net(net_name);
@@ -2268,24 +2293,9 @@ ExecStatus HoldigRif::execute()
 
 ExecStatus RmArcNodes::execute()
 {
-  stringstream s;
-  auto p = ::semant_mapa(vname);
-  if (p.first.first)
-    {
-      mapa_ptr = p.second;
-      net_ptr = &mapa_ptr->net;
-    }
-  else 
-    {
-      auto rnet = semant_net(vname);
-      if (not rnet.first.first)
-	{
-	  s << vname << " is not a name of map or net variable";
-	  return make_pair(false, s.str());
-	}
-      net_ptr = &rnet.second->net;
-      mapa_ptr = rnet.second->mapa_ptr;
-    }
+  auto p = semant_mapa_or_net(vname, mapa_ptr, net_ptr);
+  if (not p.first)
+    return p;
 
   auto r = semant_node_exp(src_exp, mapa_ptr, src);
   if (not r.first)
@@ -2295,7 +2305,7 @@ ExecStatus RmArcNodes::execute()
   if (not r.first)
     return r;
 
-  
+  stringstream s;
   auto arc = net_ptr->search_directed_arc(src, tgt);
   if (arc == nullptr)
     {
@@ -2314,24 +2324,9 @@ ExecStatus RmArcNodes::execute()
 
 ExecStatus RmArcId::execute()
 {
-  stringstream s;
-  auto p = ::semant_mapa(vname);
-  if (p.first.first)
-    {
-      mapa_ptr = p.second;
-      net_ptr = &mapa_ptr->net;
-    }
-  else 
-    {
-      auto rnet = semant_net(vname);
-      if (not rnet.first.first)
-	{
-	  s << vname << " is not a name of map or net variable";
-	  return make_pair(false, s.str());
-	}
-      net_ptr = &rnet.second->net;
-      mapa_ptr = rnet.second->mapa_ptr;
-    }
+  auto p = semant_mapa_or_net(vname, mapa_ptr, net_ptr);
+  if (not p.first)
+    return p;  
 
   auto pi = semant_int(id_exp);
   if (not pi.first.first)
@@ -2345,6 +2340,7 @@ ExecStatus RmArcId::execute()
       return a->get_info().arco_id == arc_id;
     });
   
+  stringstream s;
   if (arc == nullptr)
     {
       s << "arc id " << arc_id << " not found";
@@ -2356,5 +2352,21 @@ ExecStatus RmArcId::execute()
        << net_ptr->get_tgt_node(arc)->get_info()->rif << endl;
   net_ptr->remove_arc(arc);
   
+  return make_pair(true, "");
+}
+
+ExecStatus RmNode::execute()
+{
+  auto p = semant_mapa_or_net(vname, mapa_ptr, net_ptr);
+  if (not p.first)
+    return p;
+
+  auto r = semant_node_exp(node_exp, mapa_ptr, node_ptr);
+  if (not r.first)
+    return r;
+
+  cout << "Removing node " << node_ptr->get_info()->rif << endl;
+  net_ptr->remove_node(node_ptr);
+
   return make_pair(true, "");
 }

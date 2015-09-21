@@ -5,7 +5,5 @@
 
 2. Terminar estudios de hegemonía
 
-3. Eliminación de un arco dada una red. Esto le daría más precisión a la
-   cadena, especialmente para eliminar "falsos positivos" en upstream y
-   downstream
+3. Modificar dot para que acepte un mapa o una red
 
