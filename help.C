@@ -314,6 +314,16 @@ R"(Reporte de empresas por accionista
    regular <reg-exp> y las empresas sobre las cuales estos ejercen propiedad.
    )";
 
+static const char * hegemony_help =
+R"(Reporte de empresas por hegemonía
+
+       search hareholder hegemony <mapa-var> <int-exp>
+
+   Proporciona la lista de accionistas del mapa <mapa-var> que tengan más
+   de <int-exp> empresas; El resultado es ordenado desdecendentemente por 
+   cantidad de empresas.
+   )";
+
 ExecStatus Help::execute()
 {
   cout << endl;
@@ -337,6 +347,7 @@ ExecStatus Help::execute()
     case RMNODE: cout << rmnode_help << endl; break;
     case SHAREHOLDER: cout << shareholder_help << endl; break;
     case HOLDER: cout << holder_help << endl; break;
+    case HEGEMONY: cout << hegemony_help << endl; break;
     default: cout << "No help topic" << endl; break;
     }
   return make_pair(true, "");

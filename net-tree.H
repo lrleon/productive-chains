@@ -145,6 +145,19 @@ struct RmArcId : public Exp
   void free() { if (id_exp->type != VAR) delete id_exp; }
 };
 
+struct Hegemony : public Exp
+{
+  const string mapa_name;
+  Exp * int_exp = nullptr;
+  MetaMapa * mapa_ptr = nullptr;
+  size_t n = 0;
+  DynList<Socio> lista;
+  Hegemony(const string & mname, Exp * exp) 
+    : Exp(HEGEMONY), mapa_name(mname), int_exp(exp) {}
+  ExecStatus execute();
+  void free() { if (int_exp->type != VAR) delete int_exp; }
+};
+
 struct Shareholder : public Exp
 {                // rif-socio, nombre-socio, %
   using Desc = tuple<string, string, float>;

@@ -37,7 +37,7 @@
 %token LOAD SAVE EXIT ERROR INFO LS RM SEARCH PRODUCER PRODUCERS LIST APPEND
 %token PRODUCT ID REGEX HELP COD TYPEINFO RIF NODE REACHABLE COVER DOT UPSTREAM
 %token INPUTS ARCS OUTPUTS PATH INPUT OUTPUT RANKS SHAREHOLDER HOLDING
-%token <symbol> STRCONST INTCONST VARNAME ARC
+%token <symbol> STRCONST INTCONST VARNAME ARC HEGEMONY
 
 %type <expr> exp
 %type <expr> rvalue
@@ -123,6 +123,10 @@ cmd_unit: EXIT
         | SEARCH HOLDING REGEX VARNAME ref_exp 
 	  {
 	    $$ = new HoldingRegex($4, $5); 
+	  }
+        | SEARCH SHAREHOLDER HEGEMONY VARNAME ref_exp 
+	  {
+	    $$ = new Hegemony($4, $5);
 	  }
         | RM ARC VARNAME ref_exp ref_exp 
 	  {
@@ -2372,6 +2376,84 @@ ExecStatus HoldingRegex::execute()
 
   cout << "Holdings reports for regex " << str << " :" << endl;
   report();
+
+  return make_pair(true, "");
+}
+
+ExecStatus Hegemony::execute()
+{
+  auto p = semant_mapa(mapa_name);
+  if (not p.first.first)
+    return p.first;
+  mapa_ptr = p.second;
+
+  auto ri = semant_int(int_exp);
+  if (not ri.first.first)
+    return ri.first;
+  n = ri.second;
+
+  lista = sort(mapa_ptr->tabla_socios.filter([this] (auto s)
+    {
+      return s.empresas.size() >= n;
+    }), [] (const auto & s1, const auto & s2) 
+	       { return s1.empresas.size() > s2.empresas.size(); });
+
+  using Producer = tuple<string, string, float>;
+  using Line = tuple<string, string, string, DynList<Producer>>;
+  auto lines = lista.map<Line>([this] (const auto & s)
+  {
+    auto l = s.empresas.template map<Producer>([this] (auto p)
+      { 
+       	return make_tuple(p.first, 
+			  mapa_ptr->tabla_productores(p.first)->nombre,
+			  p.second);
+      });
+    return make_tuple(s.rif, s.nombre, to_string(s.empresas.size()), move(l));
+  });
+
+  using Lens = tuple<size_t, size_t, size_t>;
+  auto lens = lines.foldl<Lens>(make_tuple(0, 0, 0), [] (auto acu, auto t)
+    {
+      return make_tuple(max(get<0>(acu), get<0>(t).size()),
+			max(get<1>(acu), get<1>(t).size()),
+			max(get<2>(acu), get<2>(t).size()));
+    });
+
+  lines.for_each([&lens] (auto l)
+    {
+      const string blanks0(get<0>(lens) - get<0>(l).size(), ' ');
+      const string blanks1(get<1>(lens) - get<1>(l).size(), ' ');
+      const string blanks2(get<2>(lens) - get<2>(l).size(), ' ');
+      cout << " " << blanks0 << get<0>(l) << " " << blanks1 << get<1>(l)
+	   << " " << blanks2 << get<2>(l) << " : " << endl;
+      using Line = tuple<string, string, string, string>;
+      size_t i = 0;
+      auto lines = get<3>(l).template map<Line>([&i] (auto t)
+        {
+	  return make_tuple(to_string(++i), get<0>(t), 
+			    get<1>(t), to_string(get<2>(t)));
+	});
+      using Lens = tuple<size_t, size_t, size_t, size_t>;
+      auto lens = lines.template foldl<Lens>(make_tuple(0, 0, 0, 0), 
+					     [] (auto acu, auto t)
+       {
+	 return make_tuple(max(get<0>(acu), get<0>(t).size()),
+			   max(get<1>(acu), get<1>(t).size()),
+			   max(get<2>(acu), get<2>(t).size()),
+			   max(get<3>(acu), get<3>(t).size()));
+       });
+      lines.for_each([&lens] (auto t)
+        {
+	  const string blanks0(get<0>(lens) - get<0>(t).size(), ' ');
+	  const string blanks1(get<1>(lens) - get<1>(t).size(), ' ');
+	  const string blanks2(get<2>(lens) - get<2>(t).size(), ' ');
+	  const string blanks3(get<3>(lens) - get<3>(t).size(), ' ');
+	  cout << "   " << blanks0 << get<0>(t) << " " << blanks1 << get<1>(t)
+	       << " " << blanks2 << get<2>(t) << " " << blanks3 << get<3>(t)
+	       << " %" << endl;
+	});
+      cout << endl;
+    });
 
   return make_pair(true, "");
 }

@@ -89,6 +89,7 @@ RANKS        [rR][aA][nN][kK][sS]
 SHAREHOLDER  [sS][hH][aA][rR][eE][hH][oO][lL][dD][eE][rR]
 HOLDING      [hH][oO][lL][dD][iI][nN][gG]
 ARC          [aA][rR][cC]
+HEGEMONY     [hH][eE][gG][eE][mM][oO][nN][yY]
 
 SPACE           [ \f\r\t\v]
 
@@ -138,6 +139,7 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
 {SHAREHOLDER} return SHAREHOLDER;
 {HOLDING}    return HOLDING;
 {ARC}        return ARC;
+{HEGEMONY}   return HEGEMONY;
 
  /*
   * The single-characters tokens 
