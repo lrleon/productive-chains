@@ -37,7 +37,7 @@
 %token LOAD SAVE EXIT ERROR INFO LS RM SEARCH PRODUCER PRODUCERS LIST APPEND
 %token PRODUCT ID REGEX HELP COD TYPEINFO RIF NODE REACHABLE COVER DOT UPSTREAM
 %token INPUTS ARCS OUTPUTS PATH INPUT OUTPUT RANKS SHAREHOLDER HOLDING
-%token <symbol> STRCONST INTCONST VARNAME ARC HEGEMONY
+%token <symbol> STRCONST INTCONST VARNAME ARC HEGEMONY DEMAND
 
 %type <expr> exp
 %type <expr> rvalue
@@ -291,13 +291,13 @@ ExecStatus Load::execute()
       if (var == nullptr)
 	{
 	  s << "Var " << varname->name << " has not a type associated" << endl
-	    << "THIS PROBABLY IS AN REPL ERROR. PLEASE REPORT IT!";
+	    << "THIS PROBABLY IS AN REPL AH_ERROR. PLEASE REPORT IT!";
 	  return make_pair(false, s.str());
 	}
 
       if (var->var_type != Var::VarType::String)
 	{
-	  s << s << "Current type of var " << varname->name << " is not string";
+	  s << "Current type of var " << varname->name << " is not string";
 	  return make_pair(false, s.str());
 	}
       file_name = static_cast<VarString*>(var)->value;
@@ -1016,7 +1016,7 @@ ExecStatus Append::execute()
 	    break;
 	  }
 	default:
-	  ERROR("Append::execute(): invalid expression type");
+	  AH_ERROR("Append::execute(): invalid expression type");
 	}
     }
   
@@ -1123,7 +1123,7 @@ ExecStatus ListWrite::execute()
       break;
       }
     default:
-      ERROR("ListWrite::execute() invalid rvalue type");
+      AH_ERROR("ListWrite::execute() invalid rvalue type");
     }
 
   delete rexp;

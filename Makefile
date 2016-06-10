@@ -1,6 +1,6 @@
 ALEPH = ~/aleph-w
 
-CLANGPATH = /home/lrleon/LLVM-3.7/bin
+CLANGPATH = /home/lrleon/LLVM-3.8.0/bin
 
 CXX = $(CLANGPATH)/clang++
 CC = $(CLANGPATH)/clang
@@ -14,9 +14,8 @@ YACC=bison
 WARN = -Wall -Wextra -Wcast-align -Wno-sign-compare -Wno-write-strings \
        -Wno-parentheses -Wno-invalid-source-encoding -Wno-deprecated-register
 
-FLAGS = -g -O0 -std=c++14 $(WARN)
-
-OPT=-O3 -DWITHOUT_NANA -DNDEBUG -std=c++14 $(WARN)
+#FLAGS = -g -O0 -std=c++14 $(WARN)
+FLAGS=-Ofast -DWITHOUT_NANA -DNDEBUG -std=c++14 $(WARN) -D__extern_always_inline=inline
 
 INCLUDE = -I. -I $(ALEPH) 
 

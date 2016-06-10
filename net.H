@@ -392,11 +392,6 @@ private:
     assert(tgt_productor.productos.exists([tgt_producto_ptr] (auto p)
            { return p.second  == tgt_producto_ptr->cod_aran; }));
     
-    cout << "++++" << endl
-	 << "Expanding " << tgt_productor.nombre << endl
-	 << tgt_producto_ptr->nombre << " (" << tgt_producto_ptr->id << ")" 
-	 << endl;
-
     if (IS_NODE_VISITED(stgt, Visited) and 
 	productos_list(ttgt)->exists([tgt_producto_ptr] (auto p)
 				     { return tgt_producto_ptr == p; }))
@@ -445,20 +440,13 @@ private:
 	  }
 	net_up.insert_arc(tsrc, ttgt, a->get_info());
 
-	// ERROR? si se retorna desde ssrc ==> hay que eliminar este arco
-
 	const string & cod_aran = info.cod_aran;
 	const auto & input_name = tabla_insumos(insumo_id)->nombre;
  	auto productos = inter_productor_cod_aran(src_productor_ptr, cod_aran);
 	auto dist = min_distance_match(productos, input_name, threshold);
 
-	//  imprimir nombre insumo y nombre de producto
-
 	auto src_producto = get<1>(dist);
 	upstream_best(ssrc, src_producto, net_up, tsrc, threshold);
-
-	// no mete el arco porque no se consigue uno con
-	// min_distance_match. Ver como hacer pero debe haber error
       }
     return true;
   }
@@ -467,6 +455,28 @@ public:
 
   Net upstream_best(Node * ssrc, MetaProducto * producto_ptr, 
 		    size_t threshold) const
+  {
+    net.reset_nodes();
+    Net ret;
+
+    auto tsrc = ret.insert_node(ssrc->get_info());
+    Net::map_nodes(ssrc, tsrc);
+    productos_list(tsrc) = new DynList<MetaProducto*>;
+    productos_list(tsrc)->append(producto_ptr);
+
+    upstream_best(ssrc, producto_ptr, ret, tsrc, threshold);
+
+    ret.for_each_node([] (auto p) 
+		      { 
+			if (productos_list(p)) 
+			  delete productos_list(p);
+		      });
+
+    return ret;
+  }
+
+  Net downstream_best(Node * ssrc, MetaProducto * producto_ptr,
+		      size_t threshold) const
   {
     net.reset_nodes();
     Net ret;

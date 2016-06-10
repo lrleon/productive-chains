@@ -10,6 +10,8 @@
 # include <tpl_dynArrayHeap.H>
 # include <ahSort.H>
 
+using namespace gnu;
+
 extern bool verbose;
 
 using Uid = unsigned long;
@@ -107,9 +109,13 @@ struct TablaSocios : public DynSetTree<Socio, Avl_Tree, Socio::CmpLess>
 {
   TablaSocios(const char * name)
   {
+    stringstream s;
     ifstream in(name);
     if (in.fail()) 
-      throw std::domain_error(fmt("No se pudo abrir %s", name));
+      {
+	s << "No se pudo abrir " << name;
+	throw domain_error(s.str());
+      }
 
     if (::verbose)
       cout << "Reading socios ..." << endl;
@@ -121,8 +127,10 @@ struct TablaSocios : public DynSetTree<Socio, Avl_Tree, Socio::CmpLess>
       {
 	auto row = csv_read_row(in, ',');
 	if (row.size() != n)
-	  throw domain_error(fmt("number of fields of row %d is not %d",
-				 row.size(), n));
+	  {
+	    s << "number of fields of row" << row.size() << " is not " << n;
+	    throw domain_error(s.str());
+	  }
 	
 	char nac = stoi(row(5)) == 1 ? 'V' : 'E';
 	const string & unidad_economica_rif = row(2);
@@ -229,9 +237,13 @@ struct TablaUnidadesEconomicas
 
   void init_hash(const char * name)
   {
+    stringstream s;
     ifstream in(name);
     if (in.fail()) 
-      throw std::domain_error(fmt("No se pudo abrir %s", name));
+      {
+	s << "No se pudo abrir " << name;
+	throw std::domain_error(s.str());
+      }
 
     if (::verbose)
       cout << "Reading economical unities ..." << endl;
@@ -242,8 +254,10 @@ struct TablaUnidadesEconomicas
       {
 	auto row = csv_read_row(in, ',');
 	if (row.size() != n)
-	  throw domain_error(fmt("number of fields of row %d is not %d",
-				 row.size(), n));
+	  {
+	    s << "number of fields of row" << row.size() << " is not " << n;
+	    throw domain_error(s.str());
+	  }
 	emplace(row(0), row(2));
       }
     if (::verbose)
@@ -293,9 +307,13 @@ struct TablaPlantas : public HashType<Planta, Planta::CmpEqual>
   TablaPlantas(const char * name)
     : HashTable(2171, hash_id<Planta>, Planta::CmpEqual())
   {
+    stringstream s;
     ifstream in(name);
     if (in.fail()) 
-      throw std::domain_error(fmt("No se pudo abrir %s", name));
+      {
+	s << "No se pudo abrir " << name;
+	throw std::domain_error(s.str());
+      }
 
     if (::verbose)
       cout << "Reading subeconomical unities" << endl;
@@ -306,8 +324,10 @@ struct TablaPlantas : public HashType<Planta, Planta::CmpEqual>
       {
 	auto row = csv_read_row(in, ',');
 	if (row.size() != n)
-	  throw domain_error(fmt("number of fields of row %d is not %d",
-				 row.size(), n));
+	  {
+	    s << "number of fields of row" << row.size() << " is not " << n;
+	    throw domain_error(s.str());
+	  }
 	emplace(atol(row(0).c_str()), row(1), row(2));
       }
     if (::verbose)
@@ -377,9 +397,13 @@ struct TablaP : public HashType<Producto, Producto::CmpEqual>
   TablaP(const char * name)
     : HashTable(166611, hash_id<Producto>, Producto::CmpEqual())
   {    
+    stringstream s;
     ifstream in(name);
     if (in.fail()) 
-      throw std::domain_error(fmt("No se pudo abrir %s", name));
+      {
+	s << "No se pudo abrir " << name;
+	throw std::domain_error(s.str());
+      }
 
     if (::verbose)
       cout << "Reading " << name << endl;
@@ -390,8 +414,10 @@ struct TablaP : public HashType<Producto, Producto::CmpEqual>
       {
 	auto row = csv_read_row(in, ',');
 	if (row.size() != n)
-	  throw domain_error(fmt("number of fields of row %d is not %d",
-				 row.size(), n));
+	  {
+	    s << "number of fields of row" << row.size() << " is not " << n;
+	    throw domain_error(s.str());
+	  }
 	emplace(atol(row(0).c_str()), row(1), row(3), atol(row(4).c_str()));
       }
     if (::verbose)
@@ -401,9 +427,13 @@ struct TablaP : public HashType<Producto, Producto::CmpEqual>
 
   void cargar_costes(long anho, const char * costs_name) 
   {
+    stringstream s;
     ifstream in(costs_name);
     if (in.fail()) 
-      throw std::domain_error(fmt("No se pudo abrir %s", costs_name));
+      {
+	s << "No se pudo abrir " << costs_name;
+	throw std::domain_error(s.str());
+      }
 
     if (::verbose)
       cout << "Loading " << costs_name << endl;
@@ -414,8 +444,10 @@ struct TablaP : public HashType<Producto, Producto::CmpEqual>
       {
 	auto row = csv_read_row(in, ',');
 	if (row.size() != n)
-	  throw domain_error(fmt("number of fields of row %d is not %d",
-				 row.size(), n));
+	  {
+	    s << "number of fields of row" << row.size() << " is not " << n;
+	    throw domain_error(s.str());
+	  }
 	if (anho != atol(row(2).c_str()))
 	  continue;
 
@@ -513,8 +545,12 @@ struct TablaProveedorInsumo : public DynArray<ProveedorInsumo>
   TablaProveedorInsumo(const char * name, long anho)
   {
     ifstream in(name);
+    stringstream s;
     if (in.fail()) 
-      throw std::domain_error(fmt("No se pudo abrir %s", name));
+      {
+	s << "No se pudo abrir " << name;
+	throw std::domain_error(s.str());
+      }
 
     if (::verbose)
       cout << "Reading " << name << " for " << anho << endl;
@@ -526,8 +562,10 @@ struct TablaProveedorInsumo : public DynArray<ProveedorInsumo>
       {
 	auto row = csv_read_row(in, ',');
 	if (row.size() != n)
-	  throw domain_error(fmt("number of fields of row %d is not %d",
-				 row.size(), n));
+	  {
+	    s << "number of fields of row" << row.size() << " is not " << n;
+	    throw domain_error(s.str());
+	  }
 
 	// long year = atol(row(4).c_str());
 	// if (year != anho)
@@ -595,9 +633,13 @@ struct TablaProveedores : public HashType<Proveedor, CmpEqualId<Proveedor>>
   TablaProveedores(const char * name)
     : HashTable(45279, hash_id<Proveedor>, CmpEqualId<Proveedor>())
   {
+    stringstream s;
     ifstream in(name);
     if (in.fail()) 
-      throw std::domain_error(fmt("No se pudo abrir %s", name));
+      {
+	s << "No se pudo abrir " << name;
+	throw std::domain_error(s.str());
+      }
 
     if (::verbose)
       cout << "Reading " << name << endl;
@@ -607,12 +649,17 @@ struct TablaProveedores : public HashType<Proveedor, CmpEqualId<Proveedor>>
       {
 	auto row = csv_read_row(in, ',');
 	if (row.size() != n)
-	  throw domain_error(fmt("number of fields of row %d is not %d",
-				 row.size(), n));
+	  {
+	    s << "number of fields of row" << row.size() << " is not " << n;
+	    throw domain_error(s.str());
+	  }
 
 	auto nac = row(5);
 	if (nac != "V" and nac != "E")
-	  throw domain_error(fmt("Tabla prov: nacion inválida en fila %ld", i));
+	  {
+	    s << "Tabla prov: nacion inválida en fila " << i;
+	    throw domain_error(s.str());
+	  }
 	emplace(atol(row(0).c_str()), row(1), row(2), atol(row(3).c_str()), 
 		atol(row(4).c_str()), nac, atol(row(6).c_str()));
       }
@@ -625,7 +672,11 @@ struct TablaProveedores : public HashType<Proveedor, CmpEqualId<Proveedor>>
   {
     auto p = search(Proveedor(id));
     if (p == nullptr)
-      throw std::domain_error(fmt("Proveedor id %ld no encontrado", id));
+      {
+	stringstream s;
+	s << "Proveedor id " << id << " no encontrado";
+	throw std::domain_error(s.str());
+      }
     return p;
   }
 };
@@ -942,14 +993,14 @@ struct TablaMetaProductos : public DynArray<MetaProducto>
 	  {
 	    cout << "Para producto" << endl
 		 << p << endl;
-	    ERROR("Una de las entradas tiene cod_aran diferente");
+	    AH_ERROR("Una de las entradas tiene cod_aran diferente");
 	  }
 	
 	if ((*this)(p.id) == nullptr)
 	  {
 	    cout << "Para producto" << endl
 		 << p << endl;
-	    ERROR("id no encontrado");
+	    AH_ERROR("id no encontrado");
 	  }
       }
     if (::verbose)
@@ -1190,7 +1241,7 @@ struct TablaProductores : public DynArray<Productor>
     if (::verbose)
       cout << "Checking for producers consistency" << endl;
     if (not is_sorted(*this))
-      ERROR("autotest: not sorted");
+      AH_ERROR("autotest: not sorted");
 
     for (size_t i = 0, n = size(); i < n; ++i)
       {
@@ -1200,14 +1251,14 @@ struct TablaProductores : public DynArray<Productor>
 	    cout << "Productor" << endl
 		 << p << endl
 		 << "    NO ENCONTRADO" << endl;
-	    ERROR("");
+	    AH_ERROR("");
 	  }
 	if ((*this)(&p) != i)
 	  {
 	    cout << "Indice de Productor dado puntero" << endl
 		 << p << endl
 		 << "    mal cualculado" << endl;
-	    ERROR("");
+	    AH_ERROR("");
 	  }
       }
 

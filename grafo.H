@@ -351,9 +351,13 @@ public:
 
   void read_arcs(const char * name)
   {
+    stringstream s;
     ifstream in(name);
     if (in.fail()) 
-      throw std::domain_error(fmt("No se pudo abrir %s", name));
+      {
+	s << "No se pudo abrir " << name;
+	throw std::domain_error(s.str());
+      }
 
     if (::verbose)
       cout << "Reading arcs ..." << endl;
@@ -366,8 +370,11 @@ public:
 	  cout << "    i = " << i << endl;
 	auto row = csv_read_row(in, ',');
 	if (row.size() != n)
-	  throw domain_error(fmt("number of fields of row %d is not %d",
-				 row.size(), n));
+	  {
+	    s << "number of fields of row" << row.size() << " is not " << n;
+	    throw domain_error(s.str());
+	  }
+
 	if (atol(row(3).c_str()) != anho)
 	  continue;
 

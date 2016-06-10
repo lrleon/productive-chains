@@ -87,7 +87,7 @@ struct Exp : public ASTNode
       case HEGEMONY: return "HEGEMONY";
       case RMARC: return "RMARC";
       case RMNODE: return "RMNODE";
-      default: ERROR("Tipo de expresion invalido");
+      default: AH_ERROR("Tipo de expresion invalido");
       }
     return string("INVALID");
   }
@@ -95,9 +95,9 @@ struct Exp : public ASTNode
   Exp(Type t) : type(t) { }
   ExecStatus execute() 
   { 
-    ERROR("Epx: execute method called"); return ExecStatus(); 
+    AH_ERROR("Epx: execute method called"); return ExecStatus(); 
   }
-  void free() { ERROR("Exp: free() method called"); }
+  void free() { AH_ERROR("Exp: free() method called"); }
 };
 
 struct RmNode : public Exp
@@ -218,7 +218,7 @@ struct HoldingRegex : public Holder
 struct ErrorExp : Exp
 {
   string msg;
-  ErrorExp(const string & m) : Exp(ERROR), msg(m) {}
+  ErrorExp(const string & m) : Exp(AH_ERROR), msg(m) {}
   ExecStatus execute() { return make_pair(false, msg); }
   void free() {}
 };
@@ -408,7 +408,7 @@ struct Var
       case Product: return string("Product");
       case Node: return string("Node");
       case Cover: return string("Cover");
-      default: ERROR("Invalid type %ld", var_type);
+      default: AH_ERROR("Invalid type %ld", var_type);
       }
     return string("Var::type_string() var_type invalid");
   }
