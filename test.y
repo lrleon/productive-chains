@@ -148,6 +148,7 @@ help_exp: HELP           { $$ = new Help; }
         | HELP UPSTREAM  { $$ = new Help(Exp::Type::UPSTREAM); }
         | HELP INPUTS    { $$ = new Help(Exp::Type::INPUTS); }
         | HELP PATH      { $$  = new Help(Exp::Type::PATH); }
+        | HELP DEMAND    { $$  = new Help(Exp::Type::DEMAND); }
 ;
 
 item_list: ref_exp 

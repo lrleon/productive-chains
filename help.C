@@ -1,6 +1,19 @@
 
 # include <net-tree.H>
 
+static const char * demand =
+  R"(DEMAND <map-var> <id-exp> <cant>
+
+  Estudia si en el mapa expresado por <map-var> se satisface la demanda <cant>
+  del bien identificado con <id-exp>
+
+  Ejemplo:
+
+  d = demand mapa 12345 1000
+
+)";
+  
+
 static const char * load =
   R"(LOAD <string-exp>"
 
@@ -28,7 +41,7 @@ static const char * search =
      search producers <mapa-var> <reg-exp>
 
          Busca en el mapa <mapa-var> todos los productores cuyo nombre
-         encaje con la expresioon regular <reg-exp>
+         encaje con la expresion regular <reg-exp>
 
      search product id <mapa-var> <id-exp>
 
@@ -348,6 +361,7 @@ ExecStatus Help::execute()
     case SHAREHOLDER: cout << shareholder_help << endl; break;
     case HOLDER: cout << holder_help << endl; break;
     case HEGEMONY: cout << hegemony_help << endl; break;
+    case DEMAND: cout << demand << endl; break;
     default: cout << "No help topic" << endl; break;
     }
   return make_pair(true, "");
