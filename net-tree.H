@@ -44,7 +44,7 @@ struct Exp : public ASTNode
 	      SEARCHPRODUCTID, SEARCHPRODUCTREGEX, SEARCHPRODUCTCOD,
 	      SEARCHPRODUCTRIF, SEARCHNODE, NODE, COVER, REACHABLE,
 	      UPSTREAM, INPUTS, ARCS, SAVE, PATH, RANKS, SHAREHOLDER, RMARC,
-	      RMNODE, HOLDER, HEGEMONY,
+	      RMNODE, HOLDER, HEGEMONY, DEMAND,
 	      TYPEINFO, HELP, DOT, BLOCKS, ERROR } type;
 
   string type_string() const
@@ -85,6 +85,7 @@ struct Exp : public ASTNode
       case HOLDER: return "HOLDER";
       case SHAREHOLDER: return "SHAREHOLDER";
       case HEGEMONY: return "HEGEMONY";
+      case DEMAND: return "DEMAND";
       case RMARC: return "RMARC";
       case RMNODE: return "RMNODE";
       default: AH_ERROR("Tipo de expresion invalido");
@@ -95,7 +96,7 @@ struct Exp : public ASTNode
   Exp(Type t) : type(t) { }
   ExecStatus execute() 
   { 
-    AH_ERROR("Epx: execute method called"); return ExecStatus(); 
+    AH_ERROR("Exp: execute method called"); return ExecStatus(); 
   }
   void free() { AH_ERROR("Exp: free() method called"); }
 };
@@ -218,7 +219,7 @@ struct HoldingRegex : public Holder
 struct ErrorExp : Exp
 {
   string msg;
-  ErrorExp(const string & m) : Exp(AH_ERROR), msg(m) {}
+  ErrorExp(const string & m) : Exp(ERROR), msg(m) {}
   ExecStatus execute() { return make_pair(false, msg); }
   void free() {}
 };
@@ -385,7 +386,7 @@ struct Append : public Exp
 struct Var
 {
   enum VarType { Map, List, String, Int, Producer, Product, Node, 
-		 Cover, Ranks} var_type;
+		 Cover, Ranks, DemandResult } var_type;
 
   Var(VarType type) : var_type(type) {}
 
@@ -408,6 +409,7 @@ struct Var
       case Product: return string("Product");
       case Node: return string("Node");
       case Cover: return string("Cover");
+      case DemandResult: return string("Demand result");
       default: AH_ERROR("Invalid type %ld", var_type);
       }
     return string("Var::type_string() var_type invalid");
@@ -757,6 +759,43 @@ struct VarProduct : public Var
   string type_info() const { return "Product var"; }
 };
 
+struct VarDemandResult : public Var
+{
+  bool is_satisfied = false;
+  double deficit = 0.0;
+  VarList protected_producers;
+
+  VarDemandResult() : Var(DemandResult) {}
+
+  VarDemandResult * clone() const { return new VarDemandResult; }
+  void copy(Var * src)
+  {
+    VarDemandResult * ptr = static_cast<VarDemandResult*>(src);
+    is_satisfied = ptr->is_satisfied;
+    deficit = ptr->deficit;
+    protected_producers.copy(&ptr->protected_producers);
+  }
+  string info() const
+  {
+    stringstream s;
+    
+    s << "Demand result var\n"
+      << (is_satisfied ? "Demanda satisfecha\n" : "Demanda no satisfecha")
+      << '\n';
+    
+    if (is_satisfied)
+      {
+	s << "Productores protegidos:\n"
+	  << protected_producers.info();
+      }
+    else
+      s << "Déficit: " << deficit << endl;
+    
+    return s.str();
+  }
+  string type_info() const { return "Demand result var"; }
+};
+
 struct ListAccess
 { 
   string list_name;
@@ -790,6 +829,27 @@ struct ListWrite : public Exp, public ListAccess
     if (rexp->type != VAR)
       delete rexp;
   }
+};
+
+struct Demand : public Exp
+{
+  MetaMapa * map_ptr = nullptr;
+  Net * net_ptr;
+  string map_name;
+  Exp * exp_id;
+  Exp * exp_quantity;
+  
+  Demand(const string & name, Exp * id, Exp * q)
+    : Exp(DEMAND), map_name(name), exp_id(id), exp_quantity(q) {}
+
+  ExecStatus semant();
+
+  ExecStatus execute()
+  {
+    return semant();
+  }
+
+  void free() {}
 };
 
 struct Search : public Exp

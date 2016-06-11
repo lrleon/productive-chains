@@ -36,8 +36,8 @@
 
 %token LOAD SAVE EXIT ERROR INFO LS RM SEARCH PRODUCER PRODUCERS LIST APPEND
 %token PRODUCT ID REGEX HELP COD TYPEINFO RIF NODE REACHABLE COVER DOT UPSTREAM
-%token INPUTS ARCS OUTPUTS PATH INPUT OUTPUT RANKS SHAREHOLDER HOLDING
-%token <symbol> STRCONST INTCONST VARNAME ARC HEGEMONY DEMAND
+%token INPUTS ARCS OUTPUTS PATH INPUT OUTPUT RANKS SHAREHOLDER HOLDING DEMAND
+%token <symbol> STRCONST INTCONST VARNAME ARC HEGEMONY
 
 %type <expr> exp
 %type <expr> rvalue
@@ -76,6 +76,7 @@ cmd_unit: EXIT
 		 << endl;
 	    exit(0);
 	  }
+        | DEMAND VARNAME ref_exp ref_exp   { $$ = new Demand($2, $3, $4); }
         | INFO VARNAME                     { $$ = new Info($2); }
         | VARNAME                          { $$ = new Info($1); }
         | INFO VARNAME '[' ref_exp ']'     { $$ = new Info($2, $4); }
@@ -223,6 +224,7 @@ exp : LOAD ref_exp { $$ = new Load(static_cast<StringExp*>($2)); }
 	$$ = new UpstreamB($2, $3, $4, $5);
       }
     | RANKS VARNAME VARNAME { $$ = new RanksExp($2, $3); }
+    | DEMAND VARNAME ref_exp ref_exp   { $$ = new Demand($2, $3, $4); }
 ;
 
 ref_exp : STRCONST
@@ -269,7 +271,7 @@ void yyerror(char const * s)
        << "LOAD SAVE EXIT INFO LS RM SEARCH PRODUCER PRODUCERS PRODUCT" << endl
        << "ID REGEX LIST APPEND HELP COD TYPE RIF NODE REACHABLE COVER" << endl
        << "DOT UPSTREAM INPUTS OUTPUTS INPUT OUTPUT ARCS PATH RANKS" << endl
-       << "SHAREHOLDER" << endl
+       << "SHAREHOLDER DEMAND" << endl
        << endl;
 }
 
@@ -331,6 +333,12 @@ ExecStatus Assign::execute()
   stringstream s;
   switch (right_side->type)
     {
+    case Exp::Type::DEMAND:
+      {
+	auto var = new VarDemandResult;
+	left_side->set_value_ptr(var);
+	return make_pair(true, "");
+      }
     case Exp::Type::MAP:
       {
       again_graph:
@@ -944,6 +952,18 @@ static ExecStatus semant_mapa_or_net(const string & name,
       mapa_ptr = rnet.second->mapa_ptr;
     }
   return make_pair(true, "");
+}
+
+ExecStatus Demand::semant()
+{
+  auto r = ::semant_mapa_or_net(map_name, map_ptr, net_ptr);
+  
+  if (not r.first)
+    return r;
+
+  cout << "Demand\n";
+
+  return r;
 }
 
 ExecStatus Append::execute()

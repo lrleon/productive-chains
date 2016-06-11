@@ -3,7 +3,7 @@
  */
 
 /*
- *  Stuff enclosed in %{ %} in the first section is copied verbatim to the
+ *  Stuff enclosed in %{ %} in the first section is copied verbatim to the 
  *  output, so headers and global definitions are placed here to be visible
  * to the code in the file.  Don't remove anything that was here initially
  */
@@ -90,7 +90,7 @@ SHAREHOLDER  [sS][hH][aA][rR][eE][hH][oO][lL][dD][eE][rR]
 HOLDING      [hH][oO][lL][dD][iI][nN][gG]
 ARC          [aA][rR][cC]
 HEGEMONY     [hH][eE][gG][eE][mM][oO][nN][yY]
-DEMAND       [dD][dE][mM][aA][nN][dD]
+DEMAND       [dD][eE][mM][aA][nN][dD]
 
 SPACE           [ \f\r\t\v]
 
