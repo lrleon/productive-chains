@@ -48,33 +48,36 @@ void process_comand_line(int argc, char *argv[])
 
   ofstream out(meta.getValue());
   if (out.fail())
-    throw domain_error(fmt("No puedo abrir %s", meta.getValue().c_str()));
+    throw domain_error((char*)fmt("No puedo abrir %s", meta.getValue().c_str()));
 
   ifstream gstream(grafo.getValue());
   GrafoSigesic g = cargar_grafo(gstream);
 
   ifstream productores_stream(productores.getValue());
   if (productores_stream.fail())
-    throw domain_error(fmt("No puedo abrir %s", 
+    throw domain_error((char*)fmt("No puedo abrir %s", 
 			   productores.getValue().c_str()));
   TablaProductores tabla_productores(productores_stream);
   tabla_productores.save(out);
 
   ifstream productos_stream(productos.getValue());
   if (productos_stream.fail())
-    throw domain_error(fmt("No puedo abrir %s", productos.getValue().c_str()));
+    throw domain_error((char*)fmt("No puedo abrir %s",
+				  productos.getValue().c_str()));
   TablaMetaProductos tabla_productos(productos_stream);
   tabla_productos.save(out);
 
   ifstream insumos_stream(insumos.getValue());
   if (insumos_stream.fail())
-    throw domain_error(fmt("No puedo abrir %s", insumos.getValue().c_str()));
+    throw domain_error((char*)fmt("No puedo abrir %s",
+				  insumos.getValue().c_str()));
   TablaMetaInsumos tabla_insumos(insumos_stream);
   tabla_insumos.save(out);
 
   ifstream socios_stream(socios.getValue());
   if (socios_stream.fail())
-    throw domain_error(fmt("No puedo abrir %s", socios.getValue().c_str()));
+    throw domain_error((char*)fmt("No puedo abrir %s",
+				  socios.getValue().c_str()));
   TablaMetaSocios tabla_socios(socios_stream);
   tabla_socios.save(out);
 

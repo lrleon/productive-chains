@@ -78,6 +78,7 @@ NODE         [nN][oO][dD][eE]
 REACHABLE    [rR][eE][aA][cC][hH][aA][bB][lL][eE]
 COVER        [cC][oO][vV][eE][rR]
 DOT          [dD][oO][tT]
+PPDOT        [pP][pP][dD][oO][tT]
 UPSTREAM     [uU][pP][sS][tT][rR][eE][aA][mM]
 INPUTS       [iI][nN][pP][uU][tT][sS]
 OUTPUTS      [oO][uU][tT][pP][uU][tT][sS]
@@ -91,10 +92,12 @@ HOLDING      [hH][oO][lL][dD][iI][nN][gG]
 ARC          [aA][rR][cC]
 HEGEMONY     [hH][eE][gG][eE][mM][oO][nN][yY]
 DEMAND       [dD][eE][mM][aA][nN][dD]
+PRODPLAN     [pP][rR][oO][dD][pP][lL][aA][nN]
 
 SPACE           [ \f\r\t\v]
 
 INTEGER         [[:digit:]]+
+DOUBLE          [+-]?[[:digit:]]+[[\.][[:digit:]]]?[[eE][+-][[:digit:]]+]?
 VARNAME         [[:alpha:]][[:alnum:]_.-]*
 
 %%
@@ -129,6 +132,7 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
 {REACHABLE}  return REACHABLE;
 {COVER}      return COVER;
 {DOT}        return DOT;
+{PPDOT}      return PPDOT;
 {UPSTREAM}   return UPSTREAM;
 {INPUT}      return INPUT;
 {OUTPUT}     return OUTPUT;
@@ -142,6 +146,7 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
 {ARC}        return ARC;
 {HEGEMONY}   return HEGEMONY;
 {DEMAND}     return DEMAND;
+{PRODPLAN}   return PRODPLAN;
 
  /*
   * The single-characters tokens 
@@ -227,6 +232,12 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
   yylval.symbol = id_table.addstring(yytext);
   assert(yylval.symbol);
   return INTCONST;  
+}
+
+{DOUBLE} { // matches double constant 
+  yylval.symbol = id_table.addstring(yytext);
+  assert(yylval.symbol);
+  return DOUBLECONST;  
 }
 
 {VARNAME} {

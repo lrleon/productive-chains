@@ -5,6 +5,7 @@
 
 # include <tpl_tree_node.H>
 # include <net.H>
+# include <prod-plan-graph.H>
 
 using namespace std;
 
@@ -44,8 +45,8 @@ struct Exp : public ASTNode
 	      SEARCHPRODUCTID, SEARCHPRODUCTREGEX, SEARCHPRODUCTCOD,
 	      SEARCHPRODUCTRIF, SEARCHNODE, NODE, COVER, REACHABLE,
 	      UPSTREAM, INPUTS, ARCS, SAVE, PATH, RANKS, SHAREHOLDER, RMARC,
-	      RMNODE, HOLDER, HEGEMONY, DEMAND,
-	      TYPEINFO, HELP, DOT, BLOCKS, ERROR } type;
+	      RMNODE, HOLDER, HEGEMONY, DEMAND, PRODPLAN,
+	      TYPEINFO, HELP, DOT, BLOCKS, ERROR, DOUBLECONST, PPDOT } type;
 
   string type_string() const
   {
@@ -55,6 +56,7 @@ struct Exp : public ASTNode
       case LIST: return "LIST";
       case STRCONST: return "STRCONST";
       case INTCONST: return "INTCONST";
+      case DOUBLECONST: return "DOUBLECONST";
       case VAR: return "VAR";
       case ASSIGN: return "ASSIGN";
       case INFO: return "INFO";
@@ -75,6 +77,7 @@ struct Exp : public ASTNode
       case COVER: return "COVER";
       case REACHABLE: return "REACHABLE";
       case DOT: return "DOT";
+      case PPDOT: return "PPDOT";
       case BLOCKS: return "BLOCKS";
       case UPSTREAM: return "UPSTREAM";
       case INPUTS: return "INPUTS";
@@ -88,6 +91,7 @@ struct Exp : public ASTNode
       case DEMAND: return "DEMAND";
       case RMARC: return "RMARC";
       case RMNODE: return "RMNODE";
+      case PRODPLAN: return "PRODPLAN";
       default: AH_ERROR("Tipo de expresion invalido");
       }
     return string("INVALID");
@@ -386,7 +390,7 @@ struct Append : public Exp
 struct Var
 {
   enum VarType { Map, List, String, Int, Producer, Product, Node, 
-		 Cover, Ranks, DemandResult } var_type;
+		 Cover, Ranks, DemandResult, ProdPlan, Double } var_type;
 
   Var(VarType type) : var_type(type) {}
 
@@ -410,6 +414,8 @@ struct Var
       case Node: return string("Node");
       case Cover: return string("Cover");
       case DemandResult: return string("Demand result");
+      case ProdPlan: return string("Production plan");
+      case Double: return string ("Double");
       default: AH_ERROR("Invalid type %ld", var_type);
       }
     return string("Var::type_string() var_type invalid");
@@ -433,7 +439,7 @@ public:
     if (value_ptr == nullptr)
       return;
 
-    cout << "**** Freing var " << name << endl;
+    cout << "**** Freeing var " << name << endl;
     delete value_ptr;
     value_ptr = nullptr;
   }
@@ -722,11 +728,30 @@ struct VarInt : public Var
   string type_info() const { return "Int var"; }
 };
 
+struct VarDouble : public Var
+{
+  double value;
+  VarDouble() : Var(Double) {}
+  VarDouble * clone() const { return new VarDouble; }
+  void copy(Var * src) { value = static_cast<VarDouble*>(src)->value; }
+  string info() const { return "Double var: " + to_string(value); }
+  string type_info() const { return "Double var"; }
+};
+
 struct IntExp : public Exp
 {
   const long value;
 
   IntExp(const string & val) : Exp(INTCONST), value(stol(val)) {}
+  ExecStatus execute() { return make_pair(true, ""); }
+  void free() {}
+};
+
+struct DoubleExp : public Exp
+{
+  const double value;
+
+  DoubleExp(const string & val) : Exp(DOUBLECONST), value(stod(val)) {}
   ExecStatus execute() { return make_pair(true, ""); }
   void free() {}
 };
@@ -759,6 +784,45 @@ struct VarProduct : public Var
   string type_info() const { return "Product var"; }
 };
 
+struct VarProdPlan : public Var
+{
+  MetaMapa * map = nullptr;
+  ProdPlanGraph * pp = nullptr;
+  
+  VarProdPlan() : Var(ProdPlan) {}
+
+  ~VarProdPlan()
+  {
+    delete pp;
+  }
+  
+  Var * clone() const { return new VarProdPlan; }
+  
+  void copy(Var * src)
+  {
+    VarProdPlan * vpp = static_cast<VarProdPlan *>(src);
+    map = vpp->map;
+    pp = new ProdPlanGraph(map);
+    *pp = *vpp->pp;
+  }
+
+  string info() const
+  {
+    stringstream s;
+
+    s << "Production plan var: " << endl
+      << pp->get_num_nodes() << " nodes" << endl
+      << pp->get_num_arcs() << " arcs" << endl;
+
+    return s.str();
+  }
+
+  string type_info() const
+  {
+    return "Production plan var";
+  }
+};
+
 struct VarDemandResult : public Var
 {
   bool is_satisfied = false;
@@ -775,12 +839,12 @@ struct VarDemandResult : public Var
     deficit = ptr->deficit;
     protected_producers.copy(&ptr->protected_producers);
   }
-  string info() const
+
+  string to_str() const
   {
     stringstream s;
-    
-    s << "Demand result var\n"
-      << (is_satisfied ? "Demanda satisfecha\n" : "Demanda no satisfecha")
+
+    s << (is_satisfied ? "Demanda satisfecha\n" : "Demanda no satisfecha")
       << '\n';
     
     if (is_satisfied)
@@ -793,6 +857,16 @@ struct VarDemandResult : public Var
     
     return s.str();
   }
+  
+  string info() const
+  {
+    stringstream s;
+    
+    s << "Demand result var\n" << to_str();
+
+    return s.str();
+  }
+  
   string type_info() const { return "Demand result var"; }
 };
 
@@ -838,6 +912,8 @@ struct Demand : public Exp
   string map_name;
   Exp * exp_id;
   Exp * exp_quantity;
+  MetaProducto * product = nullptr;
+  VarDemandResult result;
   
   Demand(const string & name, Exp * id, Exp * q)
     : Exp(DEMAND), map_name(name), exp_id(id), exp_quantity(q) {}
@@ -850,6 +926,43 @@ struct Demand : public Exp
   }
 
   void free() {}
+};
+
+struct DemandCmd : public Demand
+{
+  using Demand::Demand;
+  ExecStatus execute();
+};
+
+struct ProdPlan : public Exp
+{
+  Net * net_ptr;
+  MetaMapa * map_ptr = nullptr;
+  string map_name;
+  Exp * exp_id;
+  Exp * exp_quantity;
+  Exp * exp_threshold;
+  MetaProducto * product = nullptr;
+  VarProdPlan result;
+  
+  ProdPlan(const string & name, Exp * id, Exp * q, Exp * mt)
+    : Exp(PRODPLAN), map_name(name), exp_id(id), exp_quantity(q),
+      exp_threshold(mt) {}
+
+  ExecStatus semant();
+
+  ExecStatus execute()
+  {
+    return semant();
+  }
+
+  void free() { }
+};
+
+struct ProdPlanCmd : public ProdPlan
+{
+  using ProdPlan::ProdPlan;
+  ExecStatus execute();
 };
 
 struct Search : public Exp
@@ -1008,6 +1121,18 @@ struct Dot : public Exp
   string file_name;
   Dot(const string & name, Exp * str_exp) 
     : Exp(DOT), net_name(name), file_exp(str_exp) {}
+  ExecStatus execute();
+  void free() { if (file_exp->type != Exp::Type::VAR) delete file_exp; }
+};
+
+struct PPDot : public Exp
+{
+  const string prod_plan_name;
+  Exp * file_exp = nullptr;
+  ProdPlanGraph * prod_plan_ptr = nullptr;
+  string file_name;
+  PPDot(const string & name, Exp * str_exp) 
+    : Exp(DOT), prod_plan_name(name), file_exp(str_exp) {}
   ExecStatus execute();
   void free() { if (file_exp->type != Exp::Type::VAR) delete file_exp; }
 };

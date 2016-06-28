@@ -37,7 +37,8 @@
 %token LOAD SAVE EXIT ERROR INFO LS RM SEARCH PRODUCER PRODUCERS LIST APPEND
 %token PRODUCT ID REGEX HELP COD TYPEINFO RIF NODE REACHABLE COVER DOT UPSTREAM
 %token INPUTS ARCS OUTPUTS PATH INPUT OUTPUT RANKS SHAREHOLDER HOLDING DEMAND
-%token <symbol> STRCONST INTCONST VARNAME ARC HEGEMONY
+%token <symbol> STRCONST INTCONST VARNAME ARC HEGEMONY PRODPLAN DOUBLECONST
+%token PPDOT
 
 %type <expr> exp
 %type <expr> rvalue
@@ -72,11 +73,15 @@ cmd_unit: EXIT
 	    // TODO: limpiar todo el ambiente. Podria ser desde una
 	    // rutina. MEJOR: poner una variable bool en true para salir
 	    // desde main()
-	    cout << "Bye ;-)" << endl 
+	    cout << "Good bye!" << endl 
 		 << endl;
 	    exit(0);
 	  }
-        | DEMAND VARNAME ref_exp ref_exp   { $$ = new Demand($2, $3, $4); }
+        | DEMAND VARNAME ref_exp ref_exp   { $$ = new DemandCmd($2, $3, $4); }
+        | PRODPLAN VARNAME ref_exp ref_exp ref_exp
+	  {
+            $$ = new ProdPlanCmd($2, $3, $4, $5);
+          }
         | INFO VARNAME                     { $$ = new Info($2); }
         | VARNAME                          { $$ = new Info($1); }
         | INFO VARNAME '[' ref_exp ']'     { $$ = new Info($2, $4); }
@@ -93,6 +98,7 @@ cmd_unit: EXIT
         | help_exp { $$ = $1; }
         | REACHABLE VARNAME ref_exp ref_exp { $$ = new Connected($2, $3, $4); }
         | DOT VARNAME ref_exp { $$ = new Dot($2, $3); }
+        | PPDOT VARNAME ref_exp { $$ = new PPDot($2, $3); }
         | INPUTS VARNAME VARNAME { $$ = new Inputs($2, $3); }
         | INPUTS VARNAME INTCONST 
 	  {
@@ -226,6 +232,10 @@ exp : LOAD ref_exp { $$ = new Load(static_cast<StringExp*>($2)); }
       }
     | RANKS VARNAME VARNAME { $$ = new RanksExp($2, $3); }
     | DEMAND VARNAME ref_exp ref_exp   { $$ = new Demand($2, $3, $4); }
+    | PRODPLAN VARNAME ref_exp ref_exp ref_exp
+      {
+	$$ = new ProdPlan($2, $3, $4, $5);
+      }
 ;
 
 ref_exp : STRCONST
@@ -240,6 +250,12 @@ ref_exp : STRCONST
 	      auto symbol = id_table($1);
 	      $$ = new IntExp(symbol);
 	    }
+          | DOUBLECONST
+	  {
+	    assert(id_table($1) == $1);
+	    auto symbol = id_table($1);
+	    $$ = new DoubleExp(symbol);
+	  }
           | rvalue
 	    {
 	      $$ = $1;
@@ -265,14 +281,14 @@ rvalue: VARNAME
 
 void yyerror(char const * s) 
 {
-  cout << "Error de sintaxis" << endl
+  cout << "Sintax error" << endl
        << endl
-       << "Asegúrate de NO HABER USADO como identificador alguna de las" << endl
-       << "siguientes palabras reservadas:" << endl
+       << "Make sure that you are not using as identifier any of the" << endl
+       << "following reserved words:" << endl
        << "LOAD SAVE EXIT INFO LS RM SEARCH PRODUCER PRODUCERS PRODUCT" << endl
        << "ID REGEX LIST APPEND HELP COD TYPE RIF NODE REACHABLE COVER" << endl
        << "DOT UPSTREAM INPUTS OUTPUTS INPUT OUTPUT ARCS PATH RANKS" << endl
-       << "SHAREHOLDER DEMAND" << endl
+       << "SHAREHOLDER DEMAND PRODPLAN PPDOT" << endl
        << endl;
 }
 
@@ -338,6 +354,20 @@ ExecStatus Assign::execute()
       {
 	auto var = new VarDemandResult;
 	left_side->set_value_ptr(var);
+	return make_pair(true, "");
+      }
+    case Exp::Type::PRODPLAN:
+      {
+	auto var = left_side->get_value_ptr();
+
+	if (var == nullptr)
+	  {
+	    var = new VarProdPlan;
+	    left_side->set_value_ptr(var);
+	  }
+
+	var->copy(&static_cast<ProdPlan*>(right_side)->result);
+	delete right_side;
 	return make_pair(true, "");
       }
     case Exp::Type::MAP:
@@ -955,18 +985,6 @@ static ExecStatus semant_mapa_or_net(const string & name,
   return make_pair(true, "");
 }
 
-ExecStatus Demand::semant()
-{
-  auto r = ::semant_mapa_or_net(map_name, map_ptr, net_ptr);
-  
-  if (not r.first)
-    return r;
-
-  cout << "Demand\n";
-
-  return r;
-}
-
 ExecStatus Append::execute()
 {
   stringstream s;
@@ -1240,6 +1258,137 @@ static pair<ExecStatus, long> semant_int(Exp * int_exp)
     }
 
   return make_pair(make_pair(true, ""), id);
+}
+
+static pair<ExecStatus, double> semant_double(Exp * double_exp)
+{
+  double val = 0.0;
+
+  auto r = double_exp->execute();
+  if (not r.first)
+    return make_pair(r, val);
+
+  switch (double_exp->type)
+    {
+    case Exp::Type::DOUBLECONST:
+      val = static_cast<DoubleExp*>(double_exp)->value;
+      break;
+    case Exp::Type::VAR:
+      {
+	stringstream s;
+	auto varname = static_cast<Varname*>(double_exp);
+	auto var = varname->get_value_ptr();
+	if (var == nullptr)
+	  {
+	    s << "var name " << varname->name << " has not a value" << endl
+	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
+	    return make_pair(make_pair(false, s.str()), val);
+	  }
+	if (var->var_type != Var::VarType::Double)
+	  {
+	    s << "Var name " << varname->name << " is not an double type";
+	    return make_pair(make_pair(false, s.str()), val);
+	  }
+	val = static_cast<VarDouble*>(var)->value;
+	break;
+      }
+    default: 
+      return make_pair(make_pair(false, 
+				 "Expression type if not a double type"), val);
+    }
+
+  return make_pair(make_pair(true, ""), val);
+}
+
+ExecStatus Demand::semant()
+{
+  auto r = ::semant_mapa_or_net(map_name, map_ptr, net_ptr);
+  
+  if (not r.first)
+    return r;
+
+  assert(map_ptr != nullptr);
+
+  auto pres = semant_product(map_ptr, exp_id, product);
+  
+  if (not pres.first)
+    return pres;
+  
+  auto qres = semant_int(exp_quantity);
+
+  if (not qres.first.first)
+    return qres.first;
+
+  
+  /* En este punto debo obtener el valor con el cual comparar la demanda
+     para decidir si satisface o no para terminar el resto. */
+
+  return r;
+}
+
+ExecStatus DemandCmd::execute()
+{
+  auto r = semant();
+  
+  if (not r.first)
+    return r;
+  
+  cout << result.to_str() << endl;
+  
+  return make_pair(true, "");
+}
+
+ExecStatus ProdPlan::semant()
+{
+  auto r = ::semant_mapa_or_net(map_name, map_ptr, net_ptr);
+  
+  if (not r.first)
+    return r;
+
+  assert(map_ptr != nullptr);
+
+  auto pres = semant_product(map_ptr, exp_id, product);
+  
+  if (not pres.first)
+    return pres;
+  
+  auto qres = semant_int(exp_quantity);
+
+  if (not qres.first.first)
+    return qres.first;
+
+  auto tres = semant_int(exp_threshold);
+
+  if (not tres.first.first)
+    return tres.first;
+
+  assert(product != nullptr);
+  result.pp = new ProdPlanGraph(map_ptr);
+
+  try
+    {
+      result.pp->build_pp(product, qres.second, tres.second);
+    }
+  catch (const exception & e)
+    {
+      cout << "Exception caught with error message: " << endl
+	   << e.what() << endl;
+      return make_pair(false, "");
+    }
+
+  return make_pair(true, "");
+};
+
+ExecStatus ProdPlanCmd::execute()
+{
+  auto r = semant();
+  
+  if (not r.first)
+    return r;
+
+  cout << result.info() << endl;
+
+  return make_pair(true, "");
 }
 
 ExecStatus Search::semant_int()
@@ -1649,9 +1798,33 @@ ExecStatus UpstreamB::execute()
   return make_pair(true, "");
 }
 
+static pair<ExecStatus, ProdPlanGraph*> semant_pp(const string & pp_name)
+{
+  stringstream s;
+  Varname * pp = var_tbl(pp_name);
+  if (pp == nullptr)
+    {
+      s << "Production plan var " << pp_name << " not found";
+      return make_pair(make_pair(false, s.str()), nullptr);
+    }
+
+  VarProdPlan * ptr = static_cast<VarProdPlan*>(pp->get_value_ptr());
+  if (ptr== nullptr)
+    {
+      s << "Prod plan"  << pp_name << " has not a associated value"
+	<< "THIS PROBABLY IS A BUG. PLEASE REPORT IT";
+      return make_pair(make_pair(false, s.str()), nullptr);
+    }
+
+  ProdPlanGraph * pp_ptr = ptr->pp;
+
+  return make_pair(make_pair(true, ""), pp_ptr);
+}
+
 ExecStatus Dot::execute()
 {
   auto r = semant_mapa_or_net(net_name, mapa_ptr, net_ptr);
+  
   if (not r.first)
     return r;
 
@@ -1672,6 +1845,33 @@ ExecStatus Dot::execute()
   Write_Arc warc(mapa_ptr->tabla_insumos);
   To_Graphviz<Net, Write_Node, Write_Arc>().digraph(*net_ptr, out, 
 						    Write_Node(), warc, "LR");
+
+  free();
+  return make_pair(true, "");
+}
+
+ExecStatus PPDot::execute()
+{
+  auto r = semant_pp(prod_plan_name);
+  
+  if (not r.first.first)
+    return r.first;
+
+  auto res = ::semant_string(file_exp);
+  if (not res.first.first)
+    return res.first;
+
+  file_name = res.second;
+
+  ofstream out(file_name);
+  if (out.fail())
+    {
+      stringstream s;
+      s << "cannot create file " << file_name;
+      return make_pair(false, s.str());
+    }
+
+  To_Graphviz<ProdPlanGraph>().digraph(*r.second, out);
 
   free();
   return make_pair(true, "");

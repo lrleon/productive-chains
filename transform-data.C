@@ -114,7 +114,8 @@ void process_comand_line(int argc, char *argv[])
   {
     ofstream gout(gname.getValue());
     if (gout.fail())
-      throw domain_error(fmt("No puedo crear %s", gname.getValue().c_str()));
+      throw domain_error((char*)fmt("No puedo crear %s",
+				    gname.getValue().c_str()));
     mapa.save(gout);
 
     ofstream log("log.txt");
@@ -123,7 +124,8 @@ void process_comand_line(int argc, char *argv[])
 
   ofstream productores_out(Pname.getValue());
   if (productores_out.fail())
-    throw domain_error(fmt("No puedo crear %s", Pname.getValue().c_str()));
+    throw domain_error((char*)fmt("No puedo crear %s",
+				  Pname.getValue().c_str()));
   TablaProductores tabla_productores(mapa.tabla_unidades,
 				     mapa.tabla_socios,
 				     mapa.tabla_proveedores,
@@ -133,18 +135,21 @@ void process_comand_line(int argc, char *argv[])
 
   ofstream productos_out(pname.getValue());
   if (productos_out.fail())
-    throw domain_error(fmt("No puedo crear %s", pname.getValue().c_str()));
+    throw domain_error((char*)fmt("No puedo crear %s",
+				  pname.getValue().c_str()));
   TablaMetaProductos tabla_productos(mapa.tabla_productos, tabla_productores);
   tabla_productos.save(productos_out);
 
   ofstream socios_out(sname.getValue());
   if (socios_out.fail())
-    throw domain_error(fmt("No puedo crear %s", sname.getValue().c_str()));
+    throw domain_error((char*)fmt("No puedo crear %s",
+				  sname.getValue().c_str()));
   mapa.tabla_socios.save(socios_out);
 
   ofstream insumos_out(iname.getValue());
   if (insumos_out.fail())
-    throw domain_error(fmt("No puedo crear %s", iname.getValue().c_str()));
+    throw domain_error((char*)fmt("No puedo crear %s",
+				  iname.getValue().c_str()));
   TablaMetaInsumos tabla_insumos(mapa.tabla_insumos);
   tabla_insumos.save(insumos_out);  
 }

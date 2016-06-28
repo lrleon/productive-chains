@@ -2,8 +2,8 @@ ALEPH = ~/aleph-w
 
 CLANGPATH = /home/lrleon/LLVM-3.8.0/bin
 
-CXX = $(CLANGPATH)/clang++
-CC = $(CLANGPATH)/clang
+CXX = clang++
+CC = clang
 
 FFLAGS=
 
@@ -14,20 +14,20 @@ YACC=bison
 WARN = -Wall -Wextra -Wcast-align -Wno-sign-compare -Wno-write-strings \
        -Wno-parentheses -Wno-invalid-source-encoding -Wno-deprecated-register
 
-#FLAGS = -g -O0 -std=c++14 $(WARN)
-FLAGS=-Ofast -DWITHOUT_NANA -DNDEBUG -std=c++14 $(WARN) -D__extern_always_inline=inline
+FLAGS = -g -O0 -std=c++14 $(WARN)
+OPT=-Ofast -DWITHOUT_NANA -DNDEBUG -std=c++14 $(WARN) -D__extern_always_inline=inline
 
 INCLUDE = -I. -I $(ALEPH) 
 
 LIBS = -L $(ALEPH) \
-       -lAleph -lnana -lm -lgsl -lgslcblas -lgmp -lmpfr -lasprintf -lpthread -lc
+       -lAleph -lm -lgsl -lgslcblas -lgmp -lmpfr -lasprintf -lpthread -lc
 
-OBJ = grafo.o net.o help.o
+OBJ = grafo.o net.o help.o prod-plan-graph.o
 
 all: test test-1 test-2 test-3 test-io test-1-op test-2-op test-3-op transform-data transform-data-op transform-data-2 transform-data-2-op test-load-grafo test-load-productores test-load-productos load-net repl test-net test-lex
 
 clean:
-	rm -f test testcsv test-1 test-2 test-3 test-1-op test-2-op test-3-op test-io transform-data transform-data-op transform-data-2 transform-data-2-op test-load-grafo test-load-productores test-load-productos load-net repl net-lex.C test-net test-lex $(OBJ) net-lex.o text.tab.o
+	rm -f test testcsv test-1 test-2 test-3 test-1-op test-2-op test-3-op test-io transform-data transform-data-op transform-data-2 transform-data-2-op test-load-grafo test-load-productores test-load-productos load-net repl net-lex.C test-net test-lex $(OBJ) net-lex.o text.tab.o prod-plan-graph.o
 
 csvparser.o: csvparser.h csvparser.c
 	$(CC) $(INCLUDE) $*.c -g -O0 -c
@@ -117,14 +117,17 @@ net: net.tab.c net-lex.o
 help.o: net-tree.H help.C
 	$(CXX) $(FLAGS) $(INCLUDE) -c help.C
 
-test: test.lex test.y net-parser.H net-symtbl.H net-tree.H net.H utils.H $(OBJ)
+test: test.lex test.y net-parser.H net-symtbl.H net-tree.H net.H utils.H prod-plan-graph.H $(OBJ)
 	$(FLEX) -o test.C test.lex 
 	$(YACC) -d -t --report-=all test.y
 	$(CXX) $(FLAGS) $(INCLUDE) -c test.tab.c
 	$(CXX) $(FLAGS) $(INCLUDE) test.C -o test test.tab.o $(OBJ) -lreadline $(LIBS)
 
-test-op: test.lex test.y net-parser.H net-symtbl.H net-tree.H $(OBJ)
+test-op: test.lex test.y net-parser.H net-symtbl.H net-tree.H net.H utils.H prod-plan-graph.H $(OBJ)
 	$(FLEX) -o test.C test.lex 
 	$(YACC) -d -t --report-=all test.y
 	$(CXX) $(OPT) $(INCLUDE) -c test.tab.c
 	$(CXX) $(OPT) $(INCLUDE) test.C -o test test.tab-op.o $(OBJ) -lreadline $(LIBS)
+
+prod-plan-graph.o: prod-plan-graph.C
+	$(CXX) $(FLAGS) -c $(INCLUDE) prod-plan-graph.C

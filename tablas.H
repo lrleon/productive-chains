@@ -118,7 +118,7 @@ struct TablaSocios : public DynSetTree<Socio, Avl_Tree, Socio::CmpLess>
       }
 
     if (::verbose)
-      cout << "Reading socios ..." << endl;
+      cout << "Loading socios ..." << endl;
 
     size_t empty_counter = 0;
     auto header = csv_read_row(in, ','); 
@@ -172,7 +172,7 @@ struct TablaMetaSocios : public DynArray<Socio>
   TablaMetaSocios(ifstream & in)
   {
     if (::verbose)
-      cout << "Reading socios ..." << endl;
+      cout << "Loading socios ..." << endl;
     size_t n;
     in >> n;
     reserve(n);
@@ -246,7 +246,7 @@ struct TablaUnidadesEconomicas
       }
 
     if (::verbose)
-      cout << "Reading economical unities ..." << endl;
+      cout << "Loading economical unities ..." << endl;
 
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
@@ -316,7 +316,7 @@ struct TablaPlantas : public HashType<Planta, Planta::CmpEqual>
       }
 
     if (::verbose)
-      cout << "Reading subeconomical unities" << endl;
+      cout << "Loading subeconomical unities" << endl;
 
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
@@ -406,7 +406,7 @@ struct TablaP : public HashType<Producto, Producto::CmpEqual>
       }
 
     if (::verbose)
-      cout << "Reading " << name << endl;
+      cout << "Loading " << name << endl;
 
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
@@ -553,7 +553,7 @@ struct TablaProveedorInsumo : public DynArray<ProveedorInsumo>
       }
 
     if (::verbose)
-      cout << "Reading " << name << " for " << anho << endl;
+      cout << "Loading " << name << " for " << anho << endl;
 
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
@@ -642,7 +642,7 @@ struct TablaProveedores : public HashType<Proveedor, CmpEqualId<Proveedor>>
       }
 
     if (::verbose)
-      cout << "Reading " << name << endl;
+      cout << "Loading " << name << endl;
     auto header = csv_read_row(in, ','); 
     const size_t n = header.size();
     for (size_t i = 0; in.good(); ++i)
@@ -967,7 +967,7 @@ struct TablaMetaProductos : public DynArray<MetaProducto>
   TablaMetaProductos(istream & in)
   {
     if (::verbose)
-      cout << "Loading MetaProductos" << endl;
+      cout << "Loading MetaProductos ..." << endl;
     size_t n;
     in >> n;
     reserve(n);
@@ -975,7 +975,7 @@ struct TablaMetaProductos : public DynArray<MetaProducto>
       access(i).load(in);
     index = build_index_ptr(*this, cmp_id);
     if (::verbose)
-      cout << "end" << endl
+      cout << "done!" << endl
 	   << endl;
   }
 
@@ -1082,14 +1082,14 @@ struct TablaMetaInsumos : public DynArray<MetaInsumo>
   TablaMetaInsumos(istream & in)
   {
     if (::verbose)
-      cout << "Loading MetaInsumos" << endl;
+      cout << "Loading MetaInsumos ..." << endl;
     size_t n;
     in >> n;
     reserve(n);
     for (auto i = 0; i < n; ++i)
       access(i).load(in);
     if (::verbose)
-      cout << "end" << endl
+      cout << "done!" << endl
   	   << endl;
   }
 };
@@ -1148,7 +1148,7 @@ struct TablaProductores : public DynArray<Productor>
   {
     if (::verbose)
       cout << "Building Productors table" << endl
-	   << "    Reading econimical unities ... " << endl;
+	   << "    Loading econimical unities ... " << endl;
 
     DynSetTree<Productor> tree;
 
@@ -1160,7 +1160,7 @@ struct TablaProductores : public DynArray<Productor>
     
     if (::verbose)
       cout << "    done" << endl
-	   << "    Reading suppliers ... " << endl;
+	   << "    Loading suppliers ... " << endl;
 
     // Ahora los proveedores, algunos de los cuales pueden ser unidades
     // económicas, en cuyo caso ya deberían de estar insertadas
@@ -1225,14 +1225,14 @@ struct TablaProductores : public DynArray<Productor>
   TablaProductores(istream & in)
   {
     if (::verbose)
-      cout << "Loading Productores" << endl;
+      cout << "Loading Productores ..." << endl;
     size_t n;
     in >> n;
     reserve(n);
     for (size_t i = 0; i < n; ++i)
       access(i).load(in);
     if (::verbose)
-      cout << "done" << endl 
+      cout << "done!" << endl 
 	   << endl;
   }
 
