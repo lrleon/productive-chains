@@ -44,32 +44,6 @@ struct LoadNetNode
   }
 };
 
-struct CmpArcs
-{
-  bool operator () (Net::Arc * a1, Net::Arc * a2) const
-  {
-    return a1->get_info().arco_id < a2->get_info().arco_id;
-  }
-};
-
-using ArcIndexType = DynSetTreap<Net::Arc *, CmpArcs>;
-
-struct LoadNetArc
-{
-  ArcIndexType * arcs_index;
-
-  LoadNetArc() {}
-  
-  LoadNetArc(ArcIndexType & idx)
-    : arcs_index(&idx) {}
-  
-  void operator () (istream & input, Net &, Net::Arc * a)
-  {
-    input >> a->get_info();
-    arcs_index->insert(a);
-  }
-};
-
 extern Net build_net(const GrafoSigesic & g, 
 		     const TablaProductores & tabla_productores);
 
@@ -84,7 +58,6 @@ struct MetaMapa
   TablaMetaInsumos   tabla_insumos;
   TablaMetaSocios    tabla_socios;
   Net                net;
-  ArcIndexType       arcs_index;
   
   // DynSetTree<string> var_names; // TODO: 
   
@@ -111,28 +84,13 @@ struct MetaMapa
       cout << "Loading Net ..." << endl;
 
     LoadNetNode ln(tabla_productores);
-    LoadNetArc la(arcs_index);
-    IO_Graph<Net, LoadNetNode, SaveNetNode, LoadNetArc> io(const_cast<Net&>(net));
+    IO_Graph<Net, LoadNetNode, SaveNetNode> io(const_cast<Net&>(net));
     io.set_load_node(ln);
-    io.set_load_arc(la);
     io.load_in_text_mode(in);
 
     if (::verbose)
       cout << " all map done!" << endl 
 	   << endl;
-  }
-
-  Net::Arc * get_arc_by_id(Uid id)
-  {
-    Net::Arc test;
-    test.get_info().arco_id = id;
-
-    Net::Arc ** result = arcs_index.search(&test);
-
-    if (result == nullptr)
-      return nullptr;
-    
-    return *result;
   }
 
   // ~MetaMapa()
