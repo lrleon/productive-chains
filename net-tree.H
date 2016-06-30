@@ -45,7 +45,7 @@ struct Exp : public ASTNode
 	      SEARCHPRODUCTID, SEARCHPRODUCTREGEX, SEARCHPRODUCTCOD,
 	      SEARCHPRODUCTRIF, SEARCHNODE, NODE, COVER, REACHABLE,
 	      UPSTREAM, INPUTS, ARCS, SAVE, PATH, RANKS, SHAREHOLDER, RMARC,
-	      RMNODE, HOLDER, HEGEMONY, DEMAND, PRODPLAN,
+	      RMNODE, HOLDER, HEGEMONY, DEMAND, PRODPLAN, PRODPLANLIST,
 	      TYPEINFO, HELP, DOT, BLOCKS, ERROR, DOUBLECONST, PPDOT } type;
 
   string type_string() const
@@ -92,6 +92,7 @@ struct Exp : public ASTNode
       case RMARC: return "RMARC";
       case RMNODE: return "RMNODE";
       case PRODPLAN: return "PRODPLAN";
+      case PRODPLANLIST: return "PRODPLANLIST";
       default: AH_ERROR("Tipo de expresion invalido");
       }
     return string("INVALID");
@@ -826,8 +827,12 @@ struct VarProdPlan : public Var
 struct VarDemandResult : public Var
 {
   bool is_satisfied = false;
-  double deficit = 0.0;
-  VarList protected_producers;
+
+  // Producto, déficit
+  DynList<pair<MetaProducto *, double>> products;
+  /* Insumo, déficit, para aquellos insumos que no están en productos.
+     A estos no se les puede calular plan de producción */
+  DynList<pair<MetaInsumo *, double>> inputs;
 
   VarDemandResult() : Var(DemandResult) {}
 
@@ -836,8 +841,8 @@ struct VarDemandResult : public Var
   {
     VarDemandResult * ptr = static_cast<VarDemandResult*>(src);
     is_satisfied = ptr->is_satisfied;
-    deficit = ptr->deficit;
-    protected_producers.copy(&ptr->protected_producers);
+    products = ptr->products;
+    inputs = ptr->inputs;
   }
 
   string to_str() const
@@ -846,15 +851,7 @@ struct VarDemandResult : public Var
 
     s << (is_satisfied ? "Demanda satisfecha\n" : "Demanda no satisfecha")
       << '\n';
-    
-    if (is_satisfied)
-      {
-	s << "Productores protegidos:\n"
-	  << protected_producers.info();
-      }
-    else
-      s << "Déficit: " << deficit << endl;
-    
+   
     return s.str();
   }
   
@@ -959,11 +956,30 @@ struct ProdPlan : public Exp
   void free() { }
 };
 
-struct ProdPlanCmd : public ProdPlan
+struct ProdPlanList : public Exp
 {
-  using ProdPlan::ProdPlan;
-  ExecStatus execute();
+  Net * net_ptr;
+  MetaMapa * map_ptr = nullptr;
+  string map_name;
+  Exp * exp_demand_result;
+  Exp * exp_threshold;
+  DynList<pair<MetaProducto *, double>> * list = nullptr;
+  VarProdPlan result;
+  
+  ProdPlanList(const string & name, Exp * dr, Exp * mt)
+    : Exp(PRODPLANLIST), map_name(name), exp_demand_result(dr),
+      exp_threshold(mt) {}
+
+  ExecStatus semant();
+
+  ExecStatus execute()
+  {
+    return semant();
+  }
+
+  void free() { }
 };
+
 
 struct Search : public Exp
 {

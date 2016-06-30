@@ -1,4 +1,5 @@
 # include <prod-plan-graph.H>
+# include <ahNow.H>
 
 Net::Arc * search_net_arc(NetArcsIdx & net_arcs, Uid id)
 {
@@ -80,15 +81,30 @@ ProdPlanGraph::create_node_and_connect(void * good, double quantity,
   return q;
 }
 
-
-void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
+void ProdPlanGraph::build_pp(DynList<pair<MetaProducto *, double>> & list,
 			     size_t max_threshold)
 {
   NetArcsIdx net_arcs;
 
+  cout << "Indexing arcs...\n";
+
   for (Net::Arc_Iterator it(map->net); it.has_curr(); it.next())
     net_arcs.insert(it.get_curr());
+  
+  cout << "Done!\n";
 
+  list.for_each([&](auto p)
+		{
+		  build_pp(p.first, p.second, max_threshold, net_arcs);
+		});
+
+  cout << "Done!\n";
+}
+
+
+void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
+			     size_t max_threshold, NetArcsIdx & net_arcs)
+{
   PPNodesIdx node_set;
   PPArcsIdx arc_set;
 

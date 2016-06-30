@@ -1,6 +1,7 @@
 # ifndef PRODPLANGRAPH_H
 # define PRODPLANGRAPH_H
 
+# include <htlist.H>
 # include <tpl_dynListQueue.H>
 # include <tpl_dynSetTree.H>
 # include <tpl_agraph.H>
@@ -80,8 +81,7 @@ struct ProdPlanGraph : PPGraph
   using PPGraph::PPGraph;
 
   MetaMapa * map;
-
-               // Map, Product, quantity
+  
   ProdPlanGraph(MetaMapa * m)
     : PPGraph(), map(m)
   {
@@ -90,9 +90,12 @@ struct ProdPlanGraph : PPGraph
 
   Node * create_node_and_connect(void *, double, NodeInfo::ProductType, Node *,
 				 PPNodesIdx &, PPArcsIdx &);
+
+  void build_pp(DynList<pair<MetaProducto *, double>> &, size_t);
   
+private:
   /// Builds a production plan with an breadth first algorithm.
-  void build_pp(MetaProducto *, double, size_t);
+  void build_pp(MetaProducto *, double, size_t, NetArcsIdx &);
 };
 
 # endif // PRODPLANGRAPH_H
