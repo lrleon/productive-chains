@@ -121,10 +121,12 @@ void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
       Node * p = queue.get();
       
       p->get_info().is_in_queue = false;
-
-      cout << "Computing plan for " << to_product(p->get_info().product)->nombre
-	   << ": " << p->get_info().quantity << endl;
-
+      
+      if (::verbose)
+	cout << "Computing plan for "
+	     << to_product(p->get_info().product)->nombre
+	     << ": " << p->get_info().quantity << endl;
+      
       to_product(p->get_info().product)->comb.for_each([&] (auto factor) {
 	  
 	  Uid input_id = get<0>(factor);
@@ -212,4 +214,6 @@ void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
 	    }
 	});
     }
+  if (::verbose)
+    cout << "Done!\n";
 }

@@ -364,6 +364,20 @@ ExecStatus Assign::execute()
 	delete right_side;
 	return make_pair(true, "");
       }
+    case Exp::Type::PRODPLANLIST:
+      {
+	auto var = left_side->get_value_ptr();
+
+	if (var == nullptr)
+	  {
+	    var = new VarProdPlan;
+	    left_side->set_value_ptr(var);
+	  }
+
+	var->copy(&static_cast<ProdPlanList*>(right_side)->result);
+	delete right_side;
+	return make_pair(true, "");
+      }
     case Exp::Type::PRODPLAN:
       {
 	auto var = left_side->get_value_ptr();

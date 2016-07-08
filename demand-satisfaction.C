@@ -48,6 +48,9 @@ DemandSatisfaction::simple_aproach(MetaProducto * product, double quantity,
   if (::verbose)
     cout << "Done!\n";
 
+  if (::verbose)
+    cout << "Computing demand satisfaction...\n";
+  
   DynListQueue<QTuple> queue;
 
   double desired_quantity = quantity;
@@ -83,6 +86,8 @@ DemandSatisfaction::simple_aproach(MetaProducto * product, double quantity,
     {
       get<0>(r) = false;
       get<1>(r).append(make_pair(product, quantity));
+      if (::verbose)
+	cout << "Done!\n";
       return r;
     }
   
@@ -196,5 +201,9 @@ DemandSatisfaction::simple_aproach(MetaProducto * product, double quantity,
 	  
 	});
     }
+
+  if (::verbose)
+    cout << "Done!\n";
+  
   return r;
 }
