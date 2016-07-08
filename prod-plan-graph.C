@@ -1,7 +1,7 @@
 # include <prod-plan-graph.H>
 # include <ahNow.H>
 
-Net::Arc * search_net_arc(NetArcsIdx & net_arcs, Uid id)
+Net::Arc * ProdPlanGraph::search_net_arc(NetArcsIdx & net_arcs, Uid id)
 {
   Net::Arc test;
   test.get_info().arco_id = id;
@@ -157,11 +157,11 @@ void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
 	  
 	  /* Extraigo los productos con el código arancelario igual al insumo
 	     con los nombres que más se parezcan según el umbral */
-	  DynList<pair<Uid, string>> filtered_list =
+	  DynList<Productor::Prod> filtered_list =
 	    producer->productos.filter([&](auto item) {
 
 		// Si no es el cod aranc, entonces no va.
-		if (item.second != cod_aran)
+		if (get<0>(item.second) != cod_aran)
 		  return false;
 		
 		// Busco el producto con id dado
@@ -174,9 +174,13 @@ void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
 		return d <= max_threshold;
 	      });
 
-	  // Si no hay productos, salgo.
+	  // Si no hay productos, creo nodo de insumo y salgo.
 	  if (filtered_list.is_empty())
-	    return;
+	    {
+	      create_node_and_connect(input, quan, NodeInfo::ProductType::Input,
+				      p, node_set, arc_set);
+	      return;
+	    }
 
 	  // Busco el de distancia menor
 	  MetaProducto * prod = nullptr;
@@ -184,7 +188,7 @@ void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
 
 	  for (auto item : filtered_list)
 	    {
-	      auto pr = map->tabla_productos(item.first);
+	      auto pr = map->tabla_productos(get<0>(item));
 
 	      size_t d = levenshtein(pr->nombre, input->nombre);
 

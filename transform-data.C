@@ -42,6 +42,11 @@ void process_comand_line(int argc, char *argv[])
 	  "insumos.txt", "nombre de archivo de insumos");
   cmd.add(iname);
 
+  ValueArg<string> 
+    fname("F", "archivo-plantas", "nombre archivo plantas", false,
+	  "plantas.txt", "nombre de archivo de plantas");
+  cmd.add(fname);
+
        /****************** Archivos de entrada ****************/
   ValueArg<string>   // nom_unidades
     unidad_economica("u", "unidad-economica", "nombre archivo unidad economica",
@@ -151,7 +156,13 @@ void process_comand_line(int argc, char *argv[])
     throw domain_error((char*)fmt("No puedo crear %s",
 				  iname.getValue().c_str()));
   TablaMetaInsumos tabla_insumos(mapa.tabla_insumos);
-  tabla_insumos.save(insumos_out);  
+  tabla_insumos.save(insumos_out);
+
+  ofstream plantas_out(fname.getValue());
+  if (plantas_out.fail())
+    throw domain_error((char*)fmt("No puedo crear %s",
+				  fname.getValue().c_str()));
+  mapa.tabla_plantas.save(plantas_out);  
 }
 
 
@@ -165,4 +176,5 @@ int main(int argc, char *argv[])
   // 	    "produccion_producto_t_insumo.csv");
 
   // mapa.save(cout);
+  return 0;
 }

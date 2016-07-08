@@ -77,7 +77,10 @@ cmd_unit: EXIT
 		 << endl;
 	    exit(0);
 	  }
-        | DEMAND VARNAME ref_exp ref_exp   { $$ = new DemandCmd($2, $3, $4); }
+        | DEMAND VARNAME ref_exp ref_exp ref_exp
+	{
+	  $$ = new DemandCmd($2, $3, $4, $5);
+	}
         | INFO VARNAME                     { $$ = new Info($2); }
         | VARNAME                          { $$ = new Info($1); }
         | INFO VARNAME '[' ref_exp ']'     { $$ = new Info($2, $4); }
@@ -227,7 +230,7 @@ exp : LOAD ref_exp { $$ = new Load(static_cast<StringExp*>($2)); }
 	$$ = new UpstreamB($2, $3, $4, $5);
       }
     | RANKS VARNAME VARNAME { $$ = new RanksExp($2, $3); }
-    | DEMAND VARNAME ref_exp ref_exp   { $$ = new Demand($2, $3, $4); }
+    | DEMAND VARNAME ref_exp ref_exp ref_exp { $$ = new Demand($2, $3, $4, $5); }
     | PRODPLAN VARNAME ref_exp ref_exp ref_exp
       {
 	$$ = new ProdPlan($2, $3, $4, $5);
@@ -349,8 +352,16 @@ ExecStatus Assign::execute()
     {
     case Exp::Type::DEMAND:
       {
-	auto var = new VarDemandResult;
-	left_side->set_value_ptr(var);
+	auto var = left_side->get_value_ptr();
+
+	if (var == nullptr)
+	  {
+	    var = new VarDemandResult;
+	    left_side->set_value_ptr(var);
+	  }
+	
+	var->copy(&static_cast<Demand*>(right_side)->result);
+	delete right_side;
 	return make_pair(true, "");
       }
     case Exp::Type::PRODPLAN:
@@ -1315,9 +1326,17 @@ ExecStatus Demand::semant()
   if (not qres.first.first)
     return qres.first;
 
+  auto tres = semant_int(exp_threshold);
   
-  /* En este punto debo obtener el valor con el cual comparar la demanda
-     para decidir si satisface o no para terminar el resto. */
+  if (not tres.first.first)
+    return tres.first;
+  
+  auto ret_val = DemandSatisfaction(map_ptr).
+    simple_aproach(product, qres.second, tres.second);
+
+  result.is_satisfied = get<0>(ret_val);
+  result.products.swap(get<1>(ret_val));
+  result.inputs.swap(get<2>(ret_val));
 
   return r;
 }
@@ -1359,13 +1378,13 @@ ExecStatus ProdPlan::semant()
     return tres.first;
 
   assert(product != nullptr);
-  result.pp = new ProdPlanGraph(map_ptr);
+  result.pp.map = map_ptr;
 
   try
     {
       DynList<pair<MetaProducto *, double>> l =
 	{ make_pair(product, qres.second) };
-      result.pp->build_pp(l, tres.second);
+      result.pp.build_pp(l, tres.second);
     }
   catch (const exception & e)
     {
@@ -1442,11 +1461,11 @@ ExecStatus ProdPlanList::semant()
   if (not tres.first.first)
     return tres.first;
 
-  result.pp = new ProdPlanGraph(map_ptr);
+  result.pp.map = map_ptr;
 
   try
     {
-      result.pp->build_pp(*list, tres.second);
+      result.pp.build_pp(*list, tres.second);
     }
   catch (const exception & e)
     {
@@ -1883,7 +1902,7 @@ static pair<ExecStatus, ProdPlanGraph*> semant_pp(const string & pp_name)
       return make_pair(make_pair(false, s.str()), nullptr);
     }
 
-  ProdPlanGraph * pp_ptr = ptr->pp;
+  ProdPlanGraph * pp_ptr = &ptr->pp;
 
   return make_pair(make_pair(true, ""), pp_ptr);
 }

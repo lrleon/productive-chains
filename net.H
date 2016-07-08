@@ -57,6 +57,7 @@ struct MetaMapa
   TablaMetaProductos tabla_productos;
   TablaMetaInsumos   tabla_insumos;
   TablaMetaSocios    tabla_socios;
+  TablaPlantas       tabla_plantas;
   Net                net;
   
   // DynSetTree<string> var_names; // TODO: 
@@ -78,7 +79,7 @@ struct MetaMapa
 
   MetaMapa(ifstream & in) 
     : tabla_productores(in), tabla_productos(in), 
-      tabla_insumos(in), tabla_socios(in)
+      tabla_insumos(in), tabla_socios(in), tabla_plantas(in)
   {
     if (::verbose) 
       cout << "Loading Net ..." << endl;
@@ -301,10 +302,6 @@ struct MetaMapa
   Node * search_node(const Productor & prod) const noexcept
   {
     return search_node(prod.rif);
-    return net.search_node([&prod] (auto ptr) 
-			   {
-			     return ptr->get_info()->rif == prod.rif;
-			   });
   }
 
   DynList<Node*> search_node_regex(const string & exp) const
@@ -333,7 +330,7 @@ private:
     DynSetTree<string> productos_productor;
     productor_ptr->productos.for_each([&productos_productor] (auto p)
       {
-	productos_productor.append(p.second);
+	productos_productor.append(get<0>(p.second));
       });
 
         // todos los productos con cod_aran
@@ -390,8 +387,9 @@ private:
 
     const auto & tgt_productor = *stgt->get_info();
 
-    assert(tgt_productor.productos.exists([tgt_producto_ptr] (auto p)
-           { return p.second  == tgt_producto_ptr->cod_aran; }));
+    assert(tgt_productor.productos.exists([tgt_producto_ptr] (auto p) {
+	  return get<0>(p.second) == tgt_producto_ptr->cod_aran;
+	}));
     
     if (IS_NODE_VISITED(stgt, Visited) and 
 	productos_list(ttgt)->exists([tgt_producto_ptr] (auto p)

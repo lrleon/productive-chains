@@ -82,11 +82,13 @@ struct ProdPlanGraph : PPGraph
 
   MetaMapa * map;
   
-  ProdPlanGraph(MetaMapa * m)
+  ProdPlanGraph(MetaMapa * m = nullptr)
     : PPGraph(), map(m)
   {
     // Empty
   }
+
+  Net::Arc * search_net_arc(NetArcsIdx &, Uid);
 
   Node * create_node_and_connect(void *, double, NodeInfo::ProductType, Node *,
 				 PPNodesIdx &, PPArcsIdx &);

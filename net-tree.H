@@ -5,6 +5,7 @@
 
 # include <tpl_tree_node.H>
 # include <net.H>
+# include <demand-satisfaction.H>
 # include <prod-plan-graph.H>
 
 using namespace std;
@@ -616,6 +617,7 @@ struct VarMap : public Var
       << "    " << value.tabla_productos.size() << " products" << endl
       << "    " << value.tabla_insumos.size() << " inputs" << endl
       << "    " << value.tabla_socios.size() << " stakeholders" << endl
+      << "    " << value.tabla_plantas.size() << " plants" << endl
       << "    " << value.net.vsize() << " nodes" << endl
       << "    " << value.net.esize() << " arcs" << endl;
     return s.str();
@@ -788,23 +790,18 @@ struct VarProduct : public Var
 struct VarProdPlan : public Var
 {
   MetaMapa * map = nullptr;
-  ProdPlanGraph * pp = nullptr;
+  ProdPlanGraph pp;
   
   VarProdPlan() : Var(ProdPlan) {}
 
-  ~VarProdPlan()
-  {
-    delete pp;
-  }
-  
   Var * clone() const { return new VarProdPlan; }
   
   void copy(Var * src)
   {
     VarProdPlan * vpp = static_cast<VarProdPlan *>(src);
     map = vpp->map;
-    pp = new ProdPlanGraph(map);
-    *pp = *vpp->pp;
+    pp.map = vpp->pp.map;
+    pp = vpp->pp;
   }
 
   string info() const
@@ -812,8 +809,8 @@ struct VarProdPlan : public Var
     stringstream s;
 
     s << "Production plan var: " << endl
-      << pp->get_num_nodes() << " nodes" << endl
-      << pp->get_num_arcs() << " arcs" << endl;
+      << pp.get_num_nodes() << " nodes" << endl
+      << pp.get_num_arcs() << " arcs" << endl;
 
     return s.str();
   }
@@ -828,8 +825,9 @@ struct VarDemandResult : public Var
 {
   bool is_satisfied = false;
 
-  // Producto, déficit
+            // Producto, déficit
   DynList<pair<MetaProducto *, double>> products;
+  
   /* Insumo, déficit, para aquellos insumos que no están en productos.
      A estos no se les puede calular plan de producción */
   DynList<pair<MetaInsumo *, double>> inputs;
@@ -837,6 +835,7 @@ struct VarDemandResult : public Var
   VarDemandResult() : Var(DemandResult) {}
 
   VarDemandResult * clone() const { return new VarDemandResult; }
+  
   void copy(Var * src)
   {
     VarDemandResult * ptr = static_cast<VarDemandResult*>(src);
@@ -849,9 +848,27 @@ struct VarDemandResult : public Var
   {
     stringstream s;
 
-    s << (is_satisfied ? "Demanda satisfecha\n" : "Demanda no satisfecha")
-      << '\n';
-   
+    if (is_satisfied)
+      {
+	s << "Demanda satisfecha";
+	return s.str();
+      }
+
+    s << "Demanda no satisfecha" << endl << endl
+      << "Producto - Déficit" << endl;
+
+    products.for_each([&s](auto item) {
+	s << item.first->nombre << " - " << item.second << endl;
+      });
+
+    if (inputs.is_empty())
+      return s.str();
+    
+    s << endl << "Insumo - Déficit" << endl;
+    inputs.for_each([&s](auto item) {
+	s << item.first->nombre << " - " << item.second << endl;
+      });
+    
     return s.str();
   }
   
@@ -909,11 +926,13 @@ struct Demand : public Exp
   string map_name;
   Exp * exp_id;
   Exp * exp_quantity;
+  Exp * exp_threshold;
   MetaProducto * product = nullptr;
   VarDemandResult result;
   
-  Demand(const string & name, Exp * id, Exp * q)
-    : Exp(DEMAND), map_name(name), exp_id(id), exp_quantity(q) {}
+  Demand(const string & name, Exp * id, Exp * q, Exp * mt)
+    : Exp(DEMAND), map_name(name), exp_id(id), exp_quantity(q),
+      exp_threshold(mt) {}
 
   ExecStatus semant();
 
