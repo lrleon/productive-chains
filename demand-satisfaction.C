@@ -13,18 +13,18 @@ Net::Arc * DemandSatisfaction::search_net_arc(ArcsIndex & net_arcs, Uid id)
   return *result;
 }
 
-double DemandSatisfaction::infer_increasement(const Tuple & t)
+double DemandSatisfaction::infer_increase(const Tuple & t)
 {
   double q = get<2>(t);
   Planta * plant = map->tabla_plantas(get<1>(t));
   double cap = plant->cap;
 
   // Si está en cap 0, no tiene sentido calcular
-  if (cap == 0)
-    return 0;
+  if (cap == 0.0)
+    return 0.0;
 
   // Calculo el 100% posible de producción
-  double possible_prod = 100 * q / cap;
+  double possible_prod = 100.0 * q / cap;
 
   // Retorno lo que podría aumentar
   return possible_prod - q;
@@ -64,22 +64,22 @@ DemandSatisfaction::simple_aproach(MetaProducto * product, double quantity,
 	auto t = producer->productos[product->id];
 
 	// Con la tupla, infiero la cantidad de producción que se puede aumentar
-	double possible_increasement = infer_increasement(t);
-	double increasement = 0.0;
+	double possible_increase = infer_increase(t);
+	double increase = 0.0;
 
-	if (possible_increasement > desired_quantity)
+	if (possible_increase > desired_quantity)
 	  {
-	    increasement = desired_quantity;
+	    increase = desired_quantity;
 	    desired_quantity = 0.0;
 	  }
 	else
 	  {
-	    increasement = possible_increasement;
-	    desired_quantity -= increasement;
+	    increase = possible_increase;
+	    desired_quantity -= increase;
 	  }
 
-	if (increasement > 0)
-	  queue.put(make_tuple(product, increasement));
+	if (increase > 0)
+	  queue.put(make_tuple(product, increase));
       });
 
   if (desired_quantity > 0) // No se satisface la demanda aguas abajo
@@ -177,22 +177,22 @@ DemandSatisfaction::simple_aproach(MetaProducto * product, double quantity,
 	  // Busco en el productor la tupla correspondiente a prod
 	  auto t = producer->productos[prod->id];
 
-	  double possible_increasement = infer_increasement(t);
-	  double increasement = 0.0;
+	  double possible_increase = infer_increase(t);
+	  double increase = 0.0;
 	  
-	  if (possible_increasement > desired_quantity)
+	  if (possible_increase > desired_quantity)
 	  {
-	    increasement = quan;
+	    increase = quan;
 	    quan = 0.0;
 	  }
 	  else
 	    {
-	      increasement = possible_increasement;
-	      quan -= increasement;
+	      increase = possible_increase;
+	      quan -= increase;
 	    }
 	  
 	  if (quan == 0)
-	    queue.put(make_tuple(prod, increasement));
+	    queue.put(make_tuple(prod, increase));
 	  else
 	    {
 	      get<0>(r) = false;

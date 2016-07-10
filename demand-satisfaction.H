@@ -34,7 +34,7 @@ struct DemandSatisfaction
 
   using QTuple = tuple<MetaProducto *, double>;
   
-  double infer_increasement(const Tuple &);
+  double infer_increase(const Tuple &);
 
   Result simple_aproach(MetaProducto *, double, size_t);
 };
