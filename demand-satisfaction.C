@@ -34,6 +34,9 @@ DemandSatisfaction::Result
 DemandSatisfaction::simple_aproach(MetaProducto * product, double quantity,
 				   size_t max_threshold)
 {
+  if (map == nullptr)
+    throw logic_error("map == nullptr");
+  
   Result r;
   get<0>(r) = true;
 
