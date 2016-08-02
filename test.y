@@ -77,11 +77,10 @@ cmd_unit: EXIT
 		 << endl;
 	    exit(0);
 	  }
-        | DEMAND VARNAME ref_exp ref_exp   { $$ = new DemandCmd($2, $3, $4); }
-        | PRODPLAN VARNAME ref_exp ref_exp ref_exp
-	  {
-            $$ = new ProdPlanCmd($2, $3, $4, $5);
-          }
+        | DEMAND VARNAME ref_exp ref_exp ref_exp
+	{
+	  $$ = new DemandCmd($2, $3, $4, $5);
+	}
         | INFO VARNAME                     { $$ = new Info($2); }
         | VARNAME                          { $$ = new Info($1); }
         | INFO VARNAME '[' ref_exp ']'     { $$ = new Info($2, $4); }
@@ -231,11 +230,12 @@ exp : LOAD ref_exp { $$ = new Load(static_cast<StringExp*>($2)); }
 	$$ = new UpstreamB($2, $3, $4, $5);
       }
     | RANKS VARNAME VARNAME { $$ = new RanksExp($2, $3); }
-    | DEMAND VARNAME ref_exp ref_exp   { $$ = new Demand($2, $3, $4); }
+    | DEMAND VARNAME ref_exp ref_exp ref_exp { $$ = new Demand($2, $3, $4, $5); }
     | PRODPLAN VARNAME ref_exp ref_exp ref_exp
       {
 	$$ = new ProdPlan($2, $3, $4, $5);
       }
+    | PRODPLAN VARNAME ref_exp ref_exp { $$ = new ProdPlanList($2, $3, $4); }
 ;
 
 ref_exp : STRCONST
@@ -352,8 +352,30 @@ ExecStatus Assign::execute()
     {
     case Exp::Type::DEMAND:
       {
-	auto var = new VarDemandResult;
-	left_side->set_value_ptr(var);
+	auto var = left_side->get_value_ptr();
+
+	if (var == nullptr)
+	  {
+	    var = new VarDemandResult;
+	    left_side->set_value_ptr(var);
+	  }
+	
+	var->copy(&static_cast<Demand*>(right_side)->result);
+	delete right_side;
+	return make_pair(true, "");
+      }
+    case Exp::Type::PRODPLANLIST:
+      {
+	auto var = left_side->get_value_ptr();
+
+	if (var == nullptr)
+	  {
+	    var = new VarProdPlan;
+	    left_side->set_value_ptr(var);
+	  }
+
+	var->copy(&static_cast<ProdPlanList*>(right_side)->result);
+	delete right_side;
 	return make_pair(true, "");
       }
     case Exp::Type::PRODPLAN:
@@ -854,9 +876,8 @@ static ExecStatus semant_product(MetaMapa * mapa_ptr,
 	break;
       }
     default:
-      s << "Producer expression is not a string with a rif neither a "
-	<< "producer var";
-    return make_pair(false, s.str());
+      s << "Producer expression is not an product id neither a product var";
+      return make_pair(false, s.str());
     }
 
   return make_pair(true, "");
@@ -1319,9 +1340,17 @@ ExecStatus Demand::semant()
   if (not qres.first.first)
     return qres.first;
 
+  auto tres = semant_int(exp_threshold);
   
-  /* En este punto debo obtener el valor con el cual comparar la demanda
-     para decidir si satisface o no para terminar el resto. */
+  if (not tres.first.first)
+    return tres.first;
+  
+  auto ret_val = DemandSatisfaction(map_ptr).
+    simple_aproach(product, qres.second, tres.second);
+
+  result.is_satisfied = get<0>(ret_val);
+  result.products.swap(get<1>(ret_val));
+  result.inputs.swap(get<2>(ret_val));
 
   return r;
 }
@@ -1363,11 +1392,13 @@ ExecStatus ProdPlan::semant()
     return tres.first;
 
   assert(product != nullptr);
-  result.pp = new ProdPlanGraph(map_ptr);
+  result.pp.map = map_ptr;
 
   try
     {
-      result.pp->build_pp(product, qres.second, tres.second);
+      DynList<pair<MetaProducto *, double>> l =
+	{ make_pair(product, qres.second) };
+      result.pp.build_pp(l, tres.second);
     }
   catch (const exception & e)
     {
@@ -1379,17 +1410,86 @@ ExecStatus ProdPlan::semant()
   return make_pair(true, "");
 };
 
-ExecStatus ProdPlanCmd::execute()
+static ExecStatus semant_demand_result(Exp * demand_result_exp, 
+				       DynList<pair<MetaProducto*,double>> *& l)
 {
-  auto r = semant();
+  auto r = demand_result_exp->execute();
   
   if (not r.first)
     return r;
 
-  cout << result.info() << endl;
+  stringstream s;
+  
+  if (demand_result_exp->type == Exp::VAR)
+    {
+      auto varname = static_cast<Varname*>(demand_result_exp);
+      auto var = varname->get_value_ptr();
+      if (var == nullptr)
+	{
+	  s << "var name " << varname->name << " has not a value" << endl
+	    << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
+	  return make_pair(false, s.str());
+	}
+      if (var->var_type == Var::VarType::DemandResult)
+	l = &static_cast<VarDemandResult*>(var)->products;
+      else
+	{
+	  s << "var " << varname->name
+	    << " is not a demand result type";
+	  return make_pair(false, s.str());
+	}
+    }
+  else
+    {
+      s << "Demand result expression is not a demand result var";
+      return make_pair(false, s.str());
+    }
 
+  if (l->is_empty())
+    {
+      s << "List is empty";
+      return make_pair(false, s.str());
+    }
+  
   return make_pair(true, "");
 }
+
+ExecStatus ProdPlanList::semant()
+{
+  auto r = ::semant_mapa_or_net(map_name, map_ptr, net_ptr);
+  
+  if (not r.first)
+    return r;
+
+  assert(map_ptr != nullptr);
+
+  auto drres = semant_demand_result(exp_demand_result, list);
+
+  if (not drres.first)
+    return drres;
+
+  assert(list != nullptr);
+
+  auto tres = semant_int(exp_threshold);
+
+  if (not tres.first.first)
+    return tres.first;
+
+  result.pp.map = map_ptr;
+
+  try
+    {
+      result.pp.build_pp(*list, tres.second);
+    }
+  catch (const exception & e)
+    {
+      cout << "Exception caught with error message: " << endl
+	   << e.what() << endl;
+      return make_pair(false, "");
+    }
+
+  return make_pair(true, "");
+};
 
 ExecStatus Search::semant_int()
 {
@@ -1816,7 +1916,7 @@ static pair<ExecStatus, ProdPlanGraph*> semant_pp(const string & pp_name)
       return make_pair(make_pair(false, s.str()), nullptr);
     }
 
-  ProdPlanGraph * pp_ptr = ptr->pp;
+  ProdPlanGraph * pp_ptr = &ptr->pp;
 
   return make_pair(make_pair(true, ""), pp_ptr);
 }

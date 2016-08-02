@@ -277,25 +277,41 @@ struct TablaUnidadesEconomicas
   }
 };
 
+const string BLANK = " ";
+
 struct Planta
 {
   Uid id;
   string rif;
   string nombre;
+  double cap;
 
   Planta(Uid i = -1) noexcept : id(i) {}
 
-  Planta(Uid i, const string & r, const string & str) 
-    : id(i), rif(r), nombre(str) {}
+  Planta(Uid i, const string & r, const string & str, double c) 
+    : id(i), rif(r), nombre(str), cap(c) {}
 
   string to_string() const
   {
-    return ::to_string(id) + " " + rif + " " + nombre;
+    return ::to_string(id) + " " + rif + " " + nombre + " " + ::to_string(cap);
   }
   
   friend ostream & operator << (ostream & out, const Planta & p)
   {
     return out << p.to_string();
+  }
+
+  void save(ostream & out) const
+  {
+    out << id << endl << nombre << endl << cap << endl;
+  }
+
+  void load(istream & in)
+  {
+    in >> id;
+    in.ignore();
+    getline(in, nombre);
+    in >> cap;
   }
 
   using CmpEqual = CmpEqualId<Planta>;
@@ -304,6 +320,9 @@ struct Planta
 struct TablaPlantas : public HashType<Planta, Planta::CmpEqual>
 {
   using HashTable = HashType<Planta, Planta::CmpEqual>;
+
+  TablaPlantas() {}
+  
   TablaPlantas(const char * name)
     : HashTable(2171, hash_id<Planta>, Planta::CmpEqual())
   {
@@ -328,13 +347,42 @@ struct TablaPlantas : public HashType<Planta, Planta::CmpEqual>
 	    s << "number of fields of row" << row.size() << " is not " << n;
 	    throw domain_error(s.str());
 	  }
-	emplace(atol(row(0).c_str()), row(1), row(2));
+	emplace(atol(row(0).c_str()), row(1), row(2), stod(row(25)));
       }
     if (::verbose)
       cout << "Done! " << endl
 	   << endl;
   }
+
+  void save(ostream & out) const
+  {
+    if (::verbose)
+      cout << "Saving Plantas..." << endl;
+    out << size() << endl;
+    for_each([&out] (const auto & p) { p.save(out); });
+    if (::verbose)
+      cout << "done!" << endl;
+  }
   
+  TablaPlantas(istream & in)
+    : HashTable(2171, hash_id<Planta>, Planta::CmpEqual())
+  {
+    if (::verbose)
+      cout << "Loading Plantas ..." << endl;
+    size_t n;
+    in >> n;
+
+    for (auto i = 0; i < n; ++i)
+      {
+	Planta p;
+	p.load(in);
+	insert(p);
+      }
+    if (::verbose)
+      cout << "done!" << endl
+	   << endl;
+  }
+
   Planta * operator () (Uid id) const
   {
     return search(Planta(id));
@@ -681,8 +729,6 @@ struct TablaProveedores : public HashType<Proveedor, CmpEqualId<Proveedor>>
   }
 };
 
-const string BLANK = " ";
-
 inline string rif_ext(Uid origen_id, Uid procedencia_id, string nombre)
 {
   replace(nombre.begin(), nombre.end(), ' ', '_');
@@ -706,14 +752,14 @@ struct TablaMetaProductos;
 struct TablaMetaInsumos;
 
 struct Productor
-{ //                      cod_aran
-  using Prod = tuple<Uid, string>;
+{ //                      cod_aran, planta_id, cantidad-declarada
+  using Prod = pair<Uid, tuple<string, Uid, double>>;
 
   bool nacional;
   string rif;
   string nombre;
   //    insumo_id, cod_aran
-  DynMapTree<Uid, string> productos; // productos que fabrica 
+  DynMapTree<Uid, tuple<string, Uid, double>> productos; // productos que fabrica 
 
       // Lista de socios accionistas. Cada par es rif accionista y %
   DynList<pair<string, float>> socios; 
@@ -738,7 +784,8 @@ struct Productor
       << "    Productos (" << productos.size() << "): ";
     productos.for_each([&s] (auto p) 
       { 
-	s << "(" << get<0>(p) << "," << get<1>(p) << "), ";
+	s << "(" << get<0>(p) << "," << get<0>(get<1>(p))
+	  << get<1>(get<1>(p)) << get<2>(get<1>(p)) << "), ";
       }); 
     return s.str();
   }
@@ -750,7 +797,8 @@ struct Productor
 	<< "    Productos (" << p.productos.size() << "): ";
     p.productos.for_each([&out] (auto p) 
       { 
-	out << "(" << get<0>(p) << "," << get<1>(p) << "), ";
+	out << "(" << get<0>(p) << "," << get<0>(get<1>(p))
+	    << get<1>(get<1>(p)) << get<2>(get<1>(p)) << "), ";
       }); 
     out << endl;
     return out;
@@ -763,7 +811,9 @@ struct Productor
 	<< productos.size();
     productos.for_each([&out] (auto p) 
 		       {
-			 out << BLANK << get<0>(p) << BLANK << get<1>(p);
+			 out << BLANK << get<0>(p) << BLANK << get<0>(get<1>(p))
+			     << BLANK << get<1>(get<1>(p))
+			     << BLANK << get<2>(get<1>(p));
 		       }); 
     out << endl
     	<< socios.size();
@@ -793,8 +843,10 @@ struct Productor
       {
 	Uid id;
 	string cod_aran;
-	in >> id >> cod_aran;
-	productos.insert(id, cod_aran);
+	Uid planta_id;
+	double cantidad;
+	in >> id >> cod_aran >> planta_id >> cantidad;
+	productos.insert(id, make_tuple(cod_aran, planta_id, cantidad));
       }
     in >> n;                // leer socios
     for (auto i = 0; i < n; ++i)
@@ -1116,9 +1168,13 @@ struct TablaProductores : public DynArray<Productor>
       {	
 	auto planta_id = prod.planta_id;
 	auto planta_ptr = tabla_plantas(planta_id);
+	auto cantidad = prod.cantidad_decl;
 	assert(planta_ptr != nullptr);
 	auto productor_ptr = (*this)(planta_ptr->rif);
-	productor_ptr->productos.append(make_pair(prod.id, prod.cod_aran));
+	productor_ptr->productos.append(make_pair(prod.id,
+						  make_tuple(prod.cod_aran,
+							     planta_id,
+							     cantidad)));
       });
     if (::verbose)
       cout << "    done" << endl;

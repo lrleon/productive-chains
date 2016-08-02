@@ -1,29 +1,112 @@
 # include <prod-plan-graph.H>
+# include <ahNow.H>
 
-void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
+Net::Arc * ProdPlanGraph::search_net_arc(NetArcsIdx & net_arcs, Uid id)
+{
+  Net::Arc test;
+  test.get_info().arco_id = id;
+
+  Net::Arc ** result = net_arcs.search(&test);
+
+  if (result == nullptr)
+    return nullptr;
+
+  return *result;
+}
+
+MetaProducto * to_product(void * p)
+{
+  return reinterpret_cast<MetaProducto *>(p);
+}
+
+MetaInsumo * to_input(void * p)
+{
+  return reinterpret_cast<MetaInsumo *>(p);
+}
+
+string NodeInfo::to_str() const
+{
+  if (type == ProductType::Product)
+    return to_product(product)->nombre;
+  else
+    return to_input(product)->nombre;
+}
+
+Uid NodeInfo::get_id() const
+{
+  if (type == ProductType::Product)
+    return to_product(product)->id;
+  else
+    return to_input(product)->id;
+}
+
+ProdPlanGraph::Node *
+ProdPlanGraph::create_node_and_connect(void * good, double quantity,
+				       NodeInfo::ProductType t,
+				       Node * p, PPNodesIdx & nodes,
+				       PPArcsIdx & arcs)
+{
+  Node test_node(NodeInfo(good, 0));
+  Node ** result_node = nodes.search(&test_node);
+  
+  Node * q = nullptr;
+  
+  if (result_node == nullptr)
+    {
+      q = insert_node(NodeInfo(good, quantity, t));
+      nodes.insert(q);
+    }
+  else
+    {
+      q = *result_node;
+      q->get_info().quantity += quantity;
+    }
+  
+  // Ver si existe arco entre q y p
+  Arc test_arc(q, p);
+  Arc ** result_arc = arcs.search(&test_arc);
+  Arc * a = nullptr;
+  
+  if (result_arc == nullptr)
+    {
+      a = insert_arc(q, p, quantity);
+      arcs.insert(a);
+    }
+  else
+    {
+      a = *result_arc;
+      a->get_info() = quantity;
+    }
+  
+  return q;
+}
+
+void ProdPlanGraph::build_pp(DynList<pair<MetaProducto *, double>> & list,
 			     size_t max_threshold)
 {
-  struct CmpNode
-  {
-    bool operator () (Node * p, Node * q) const
-    {
-      return p->get_info().product->id < q->get_info().product->id;
-    }
-  };
+  NetArcsIdx net_arcs;
 
-  struct CmpArcs
-  {
-    bool operator () (Arc * a1, Arc * a2) const
-    {
-      if (a1->src_node < a2->src_node)
-	return true;
-      
-      return not (a2->src_node < a1->src_node) and a1->tgt_node < a2->tgt_node;
-    }
-  };
+  cout << "Indexing arcs...\n";
+
+  for (Net::Arc_Iterator it(map->net); it.has_curr(); it.next())
+    net_arcs.insert(it.get_curr());
   
-  DynSetTreap<Node *, CmpNode> node_set;
-  DynSetTreap<Arc *, CmpArcs> arc_set;
+  cout << "Done!\n";
+
+  list.for_each([&](auto p)
+		{
+		  build_pp(p.first, p.second, max_threshold, net_arcs);
+		});
+
+  cout << "Done!\n";
+}
+
+
+void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
+			     size_t max_threshold, NetArcsIdx & net_arcs)
+{
+  PPNodesIdx node_set;
+  PPArcsIdx arc_set;
 
   DynListQueue<PPGraph::Node *> queue;
   
@@ -38,12 +121,14 @@ void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
       Node * p = queue.get();
       
       p->get_info().is_in_queue = false;
-
-      cout << "Computing plan for " << p->get_info().product->nombre
-	   << ": " << p->get_info().quantity << endl;
-
-      p->get_info().product->comb.for_each([&] (auto factor) {
-
+      
+      if (::verbose)
+	cout << "Computing plan for "
+	     << to_product(p->get_info().product)->nombre
+	     << ": " << p->get_info().quantity << endl;
+      
+      to_product(p->get_info().product)->comb.for_each([&] (auto factor) {
+	  
 	  Uid input_id = get<0>(factor);
 	  string cod_aran = get<1>(factor);
 	  double reqq = get<2>(factor);
@@ -52,41 +137,33 @@ void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
 	  if (reqq == 0)
 	    return;
 
+	  MetaInsumo * input = map->tabla_insumos(input_id);
+	  double quan = reqq * p->get_info().quantity;
+
+	  assert(input != nullptr);
+
 	  // Looking for arc in net
-	  Net::Arc * arc_in_net = map->get_arc_by_id(arc_id);
+	  Net::Arc * arc_in_net = search_net_arc(net_arcs, arc_id);
 	  
-	  if (arc_in_net == nullptr)
+	  if (arc_in_net == nullptr) // Creo nodo insumo y no encolo
 	    {
-	      /* FIXME: Revisar porqué hay arcos no existentes. Creo que no
-		 debería ocurrir */
-	      stringstream s;
-	      cout << "Arc with id " << arc_id << " does not exist. "
-		   << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
-	      throw domain_error(s.str());
+	      create_node_and_connect(input, quan, NodeInfo::ProductType::Input,
+				      p, node_set, arc_set);
+	      return;
 	    }
 
-	  // Obtengo el productor que provee el insumo
+	  // Existe arco, obtengo el productor que provee el insumo
 	  Productor * producer = map->net.get_src_node(arc_in_net)->get_info();
 
 	  assert(producer != nullptr);
-
-	  MetaInsumo * input = map->tabla_insumos(input_id);
-
-	  if (input == nullptr)
-	    {
-	      stringstream s;
-	      cout << "Input with id " << input_id << " does not exist. "
-		   << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
-	      throw domain_error(s.str());
-	    }
-
+	  
 	  /* Extraigo los productos con el código arancelario igual al insumo
 	     con los nombres que más se parezcan según el umbral */
-	  DynList<pair<Uid, string>> filtered_list =
+	  DynList<Productor::Prod> filtered_list =
 	    producer->productos.filter([&](auto item) {
 
 		// Si no es el cod aranc, entonces no va.
-		if (item.second != cod_aran)
+		if (get<0>(item.second) != cod_aran)
 		  return false;
 		
 		// Busco el producto con id dado
@@ -99,9 +176,13 @@ void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
 		return d <= max_threshold;
 	      });
 
-	  // Si no hay productos, salgo.
+	  // Si no hay productos, creo nodo de insumo y salgo.
 	  if (filtered_list.is_empty())
-	    return;
+	    {
+	      create_node_and_connect(input, quan, NodeInfo::ProductType::Input,
+				      p, node_set, arc_set);
+	      return;
+	    }
 
 	  // Busco el de distancia menor
 	  MetaProducto * prod = nullptr;
@@ -109,7 +190,7 @@ void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
 
 	  for (auto item : filtered_list)
 	    {
-	      auto pr = map->tabla_productos(item.first);
+	      auto pr = map->tabla_productos(get<0>(item));
 
 	      size_t d = levenshtein(pr->nombre, input->nombre);
 
@@ -121,48 +202,18 @@ void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
 	    }
 
 	  assert(prod != nullptr);
-	  		
-	  // I got the product. Then compute quantity, insert node and connect
-	  double quan = reqq * p->get_info().quantity;
 
-	  // Verificar si existe un nodo en el grafo con prod
-	  Node test(NodeInfo(prod, 0));
-	  Node ** result = node_set.search(&test);
+	  Node * q = create_node_and_connect(prod, quan,
+					     NodeInfo::ProductType::Product,
+					     p, node_set, arc_set);
 
-	  Node * q = nullptr;
-
-	  if (result == nullptr)
+	  if (not q->get_info().is_in_queue)
 	    {
-	      q = insert_node(NodeInfo(prod, quan));
-	      node_set.insert(q);
 	      queue.put(q);
-	    }
-	  else
-	    {
-	      q = *result;
-	      q->get_info().quantity += quan;
-
-	      if (not q->get_info().is_in_queue)
-		queue.put(q);
-	    }
-
-	  q->get_info().is_in_queue = true;
-
-	  // Ver si existe arco entre q y p
-	  Arc arc_test(q, p);
-	  Arc ** res = arc_set.search(&arc_test);
-	  Arc * a = nullptr;
-
-	  if (res == nullptr)
-	    {
-	      a = insert_arc(q, p, quan);
-	      arc_set.insert(a);
-	    }
-	  else
-	    {
-	      a = *res;
-	      a->get_info() = quan;
+	      q->get_info().is_in_queue = true;
 	    }
 	});
     }
+  if (::verbose)
+    cout << "Done!\n";
 }

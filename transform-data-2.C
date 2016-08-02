@@ -43,6 +43,10 @@ void process_comand_line(int argc, char *argv[])
 			   false, "insumos.txt", "nombre archivo insumos");
   cmd.add(insumos);
 
+  ValueArg<string> plantas("f", "archivo-plantas", "nombre archivo plantas",
+			   false, "plantas.txt", "nombre archivo plantas");
+  cmd.add(plantas);
+
   cmd.parse(argc, argv);
   ::verbose = verbose.getValue();
 
@@ -81,6 +85,13 @@ void process_comand_line(int argc, char *argv[])
   TablaMetaSocios tabla_socios(socios_stream);
   tabla_socios.save(out);
 
+  ifstream plantas_stream(plantas.getValue());
+  if (plantas_stream.fail())
+    throw domain_error((char*)fmt("No puedo abrir %s",
+				  plantas.getValue().c_str()));
+  TablaPlantas tabla_plantas(plantas_stream);
+  tabla_plantas.save(out);
+
   Net net = build_net(g, tabla_productores);
   save_net(net, tabla_productores, out);
 }
@@ -89,4 +100,5 @@ void process_comand_line(int argc, char *argv[])
 int main(int argc, char *argv[])
 {
   process_comand_line(argc, argv);
+  return 0;
 }

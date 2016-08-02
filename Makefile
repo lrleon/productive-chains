@@ -1,6 +1,7 @@
-ALEPH = ~/aleph-w
 
-CLANGPATH = /home/lrleon/LLVM-3.8.0/bin
+ALEPH = /home/lrleon/Aleph-w
+
+CLANGPATH = /usr/bin
 
 CXX = $(CLANGPATH)/clang++
 CC = $(CLANGPATH)/clang
@@ -22,12 +23,12 @@ INCLUDE = -I. -I $(ALEPH)
 LIBS = -L $(ALEPH) \
        -lAleph -lm -lgsl -lgslcblas -lgmp -lmpfr -lasprintf -lpthread -lc
 
-OBJ = grafo.o net.o help.o prod-plan-graph.o
+OBJ = grafo.o net.o help.o prod-plan-graph.o demand-satisfaction.o
 
 all: test test-1 test-2 test-3 test-io test-1-op test-2-op test-3-op transform-data transform-data-op transform-data-2 transform-data-2-op test-load-grafo test-load-productores test-load-productos load-net repl test-net test-lex
 
 clean:
-	rm -f test testcsv test-1 test-2 test-3 test-1-op test-2-op test-3-op test-io transform-data transform-data-op transform-data-2 transform-data-2-op test-load-grafo test-load-productores test-load-productos load-net repl net-lex.C test-net test-lex $(OBJ) net-lex.o text.tab.o prod-plan-graph.o
+	rm -f test test-op testcsv test-1 test-2 test-3 test-1-op test-2-op test-3-op test-io transform-data transform-data-op transform-data-2 transform-data-2-op test-load-grafo test-load-productores test-load-productos load-net repl net-lex.C test-net test-lex $(OBJ) net-lex.o text.tab.o prod-plan-graph.o test.tab.h test.tab.c test.tab.o test.tab-op.o csvparser.o *~
 
 csvparser.o: csvparser.h csvparser.c
 	$(CC) $(INCLUDE) $*.c -g -O0 -c
@@ -117,7 +118,7 @@ net: net.tab.c net-lex.o
 help.o: net-tree.H help.C
 	$(CXX) $(FLAGS) $(INCLUDE) -c help.C
 
-test: test.lex test.y net-parser.H net-symtbl.H net-tree.H net.H utils.H prod-plan-graph.H $(OBJ)
+test: test.lex test.y net-parser.H net-symtbl.H net-tree.H net.H utils.H prod-plan-graph.H demand-satisfaction.H $(OBJ)
 	$(FLEX) -o test.C test.lex 
 	$(YACC) -d -t --report-=all test.y
 	$(CXX) $(FLAGS) $(INCLUDE) -c test.tab.c
@@ -126,8 +127,11 @@ test: test.lex test.y net-parser.H net-symtbl.H net-tree.H net.H utils.H prod-pl
 test-op: test.lex test.y net-parser.H net-symtbl.H net-tree.H net.H utils.H prod-plan-graph.H $(OBJ)
 	$(FLEX) -o test.C test.lex 
 	$(YACC) -d -t --report-=all test.y
-	$(CXX) $(OPT) $(INCLUDE) -c test.tab.c
-	$(CXX) $(OPT) $(INCLUDE) test.C -o test test.tab-op.o $(OBJ) -lreadline $(LIBS)
+	$(CXX) $(OPT) $(INCLUDE) -c test.tab.c -o test.tab-op.o
+	$(CXX) $(OPT) $(INCLUDE) test.C -o test-op test.tab-op.o $(OBJ) -lreadline $(LIBS)
 
 prod-plan-graph.o: prod-plan-graph.C
 	$(CXX) $(FLAGS) -c $(INCLUDE) prod-plan-graph.C
+
+demand-satisfaction.o: demand-satisfaction.C
+	$(CXX) $(FLAGS) -c $(INCLUDE) demand-satisfaction.C	

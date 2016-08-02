@@ -44,32 +44,6 @@ struct LoadNetNode
   }
 };
 
-struct CmpArcs
-{
-  bool operator () (Net::Arc * a1, Net::Arc * a2) const
-  {
-    return a1->get_info().arco_id < a2->get_info().arco_id;
-  }
-};
-
-using ArcIndexType = DynSetTreap<Net::Arc *, CmpArcs>;
-
-struct LoadNetArc
-{
-  ArcIndexType * arcs_index;
-
-  LoadNetArc() {}
-  
-  LoadNetArc(ArcIndexType & idx)
-    : arcs_index(&idx) {}
-  
-  void operator () (istream & input, Net &, Net::Arc * a)
-  {
-    input >> a->get_info();
-    arcs_index->insert(a);
-  }
-};
-
 extern Net build_net(const GrafoSigesic & g, 
 		     const TablaProductores & tabla_productores);
 
@@ -83,8 +57,8 @@ struct MetaMapa
   TablaMetaProductos tabla_productos;
   TablaMetaInsumos   tabla_insumos;
   TablaMetaSocios    tabla_socios;
+  TablaPlantas       tabla_plantas;
   Net                net;
-  ArcIndexType       arcs_index;
   
   // DynSetTree<string> var_names; // TODO: 
   
@@ -105,34 +79,19 @@ struct MetaMapa
 
   MetaMapa(ifstream & in) 
     : tabla_productores(in), tabla_productos(in), 
-      tabla_insumos(in), tabla_socios(in)
+      tabla_insumos(in), tabla_socios(in), tabla_plantas(in)
   {
     if (::verbose) 
       cout << "Loading Net ..." << endl;
 
     LoadNetNode ln(tabla_productores);
-    LoadNetArc la(arcs_index);
-    IO_Graph<Net, LoadNetNode, SaveNetNode, LoadNetArc> io(const_cast<Net&>(net));
+    IO_Graph<Net, LoadNetNode, SaveNetNode> io(const_cast<Net&>(net));
     io.set_load_node(ln);
-    io.set_load_arc(la);
     io.load_in_text_mode(in);
 
     if (::verbose)
       cout << " all map done!" << endl 
 	   << endl;
-  }
-
-  Net::Arc * get_arc_by_id(Uid id)
-  {
-    Net::Arc test;
-    test.get_info().arco_id = id;
-
-    Net::Arc ** result = arcs_index.search(&test);
-
-    if (result == nullptr)
-      return nullptr;
-    
-    return *result;
   }
 
   // ~MetaMapa()
@@ -343,10 +302,6 @@ struct MetaMapa
   Node * search_node(const Productor & prod) const noexcept
   {
     return search_node(prod.rif);
-    return net.search_node([&prod] (auto ptr) 
-			   {
-			     return ptr->get_info()->rif == prod.rif;
-			   });
   }
 
   DynList<Node*> search_node_regex(const string & exp) const
@@ -375,7 +330,7 @@ private:
     DynSetTree<string> productos_productor;
     productor_ptr->productos.for_each([&productos_productor] (auto p)
       {
-	productos_productor.append(p.second);
+	productos_productor.append(get<0>(p.second));
       });
 
         // todos los productos con cod_aran
@@ -432,8 +387,9 @@ private:
 
     const auto & tgt_productor = *stgt->get_info();
 
-    assert(tgt_productor.productos.exists([tgt_producto_ptr] (auto p)
-           { return p.second  == tgt_producto_ptr->cod_aran; }));
+    assert(tgt_productor.productos.exists([tgt_producto_ptr] (auto p) {
+	  return get<0>(p.second) == tgt_producto_ptr->cod_aran;
+	}));
     
     if (IS_NODE_VISITED(stgt, Visited) and 
 	productos_list(ttgt)->exists([tgt_producto_ptr] (auto p)

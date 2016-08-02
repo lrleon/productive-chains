@@ -5,6 +5,7 @@
 
 # include <tpl_tree_node.H>
 # include <net.H>
+# include <demand-satisfaction.H>
 # include <prod-plan-graph.H>
 
 using namespace std;
@@ -45,7 +46,7 @@ struct Exp : public ASTNode
 	      SEARCHPRODUCTID, SEARCHPRODUCTREGEX, SEARCHPRODUCTCOD,
 	      SEARCHPRODUCTRIF, SEARCHNODE, NODE, COVER, REACHABLE,
 	      UPSTREAM, INPUTS, ARCS, SAVE, PATH, RANKS, SHAREHOLDER, RMARC,
-	      RMNODE, HOLDER, HEGEMONY, DEMAND, PRODPLAN,
+	      RMNODE, HOLDER, HEGEMONY, DEMAND, PRODPLAN, PRODPLANLIST,
 	      TYPEINFO, HELP, DOT, BLOCKS, ERROR, DOUBLECONST, PPDOT } type;
 
   string type_string() const
@@ -92,6 +93,7 @@ struct Exp : public ASTNode
       case RMARC: return "RMARC";
       case RMNODE: return "RMNODE";
       case PRODPLAN: return "PRODPLAN";
+      case PRODPLANLIST: return "PRODPLANLIST";
       default: AH_ERROR("Tipo de expresion invalido");
       }
     return string("INVALID");
@@ -615,6 +617,7 @@ struct VarMap : public Var
       << "    " << value.tabla_productos.size() << " products" << endl
       << "    " << value.tabla_insumos.size() << " inputs" << endl
       << "    " << value.tabla_socios.size() << " stakeholders" << endl
+      << "    " << value.tabla_plantas.size() << " plants" << endl
       << "    " << value.net.vsize() << " nodes" << endl
       << "    " << value.net.esize() << " arcs" << endl;
     return s.str();
@@ -787,23 +790,18 @@ struct VarProduct : public Var
 struct VarProdPlan : public Var
 {
   MetaMapa * map = nullptr;
-  ProdPlanGraph * pp = nullptr;
+  ProdPlanGraph pp;
   
   VarProdPlan() : Var(ProdPlan) {}
 
-  ~VarProdPlan()
-  {
-    delete pp;
-  }
-  
   Var * clone() const { return new VarProdPlan; }
   
   void copy(Var * src)
   {
     VarProdPlan * vpp = static_cast<VarProdPlan *>(src);
     map = vpp->map;
-    pp = new ProdPlanGraph(map);
-    *pp = *vpp->pp;
+    pp.map = vpp->pp.map;
+    pp = vpp->pp;
   }
 
   string info() const
@@ -811,8 +809,8 @@ struct VarProdPlan : public Var
     stringstream s;
 
     s << "Production plan var: " << endl
-      << pp->get_num_nodes() << " nodes" << endl
-      << pp->get_num_arcs() << " arcs" << endl;
+      << pp.get_num_nodes() << " nodes" << endl
+      << pp.get_num_arcs() << " arcs" << endl;
 
     return s.str();
   }
@@ -826,34 +824,50 @@ struct VarProdPlan : public Var
 struct VarDemandResult : public Var
 {
   bool is_satisfied = false;
-  double deficit = 0.0;
-  VarList protected_producers;
+
+            // Producto, déficit
+  DynList<pair<MetaProducto *, double>> products;
+  
+  /* Insumo, déficit, para aquellos insumos que no están en productos.
+     A estos no se les puede calular plan de producción */
+  DynList<pair<MetaInsumo *, double>> inputs;
 
   VarDemandResult() : Var(DemandResult) {}
 
   VarDemandResult * clone() const { return new VarDemandResult; }
+  
   void copy(Var * src)
   {
     VarDemandResult * ptr = static_cast<VarDemandResult*>(src);
     is_satisfied = ptr->is_satisfied;
-    deficit = ptr->deficit;
-    protected_producers.copy(&ptr->protected_producers);
+    products = ptr->products;
+    inputs = ptr->inputs;
   }
 
   string to_str() const
   {
     stringstream s;
 
-    s << (is_satisfied ? "Demanda satisfecha\n" : "Demanda no satisfecha")
-      << '\n';
-    
     if (is_satisfied)
       {
-	s << "Productores protegidos:\n"
-	  << protected_producers.info();
+	s << "Demanda satisfecha";
+	return s.str();
       }
-    else
-      s << "Déficit: " << deficit << endl;
+
+    s << "Demanda no satisfecha" << endl << endl
+      << "Producto - Déficit" << endl;
+
+    products.for_each([&s](auto item) {
+	s << item.first->nombre << " - " << item.second << endl;
+      });
+
+    if (inputs.is_empty())
+      return s.str();
+    
+    s << endl << "Insumo - Déficit" << endl;
+    inputs.for_each([&s](auto item) {
+	s << item.first->nombre << " - " << item.second << endl;
+      });
     
     return s.str();
   }
@@ -912,11 +926,13 @@ struct Demand : public Exp
   string map_name;
   Exp * exp_id;
   Exp * exp_quantity;
+  Exp * exp_threshold;
   MetaProducto * product = nullptr;
   VarDemandResult result;
   
-  Demand(const string & name, Exp * id, Exp * q)
-    : Exp(DEMAND), map_name(name), exp_id(id), exp_quantity(q) {}
+  Demand(const string & name, Exp * id, Exp * q, Exp * mt)
+    : Exp(DEMAND), map_name(name), exp_id(id), exp_quantity(q),
+      exp_threshold(mt) {}
 
   ExecStatus semant();
 
@@ -959,11 +975,30 @@ struct ProdPlan : public Exp
   void free() { }
 };
 
-struct ProdPlanCmd : public ProdPlan
+struct ProdPlanList : public Exp
 {
-  using ProdPlan::ProdPlan;
-  ExecStatus execute();
+  Net * net_ptr;
+  MetaMapa * map_ptr = nullptr;
+  string map_name;
+  Exp * exp_demand_result;
+  Exp * exp_threshold;
+  DynList<pair<MetaProducto *, double>> * list = nullptr;
+  VarProdPlan result;
+  
+  ProdPlanList(const string & name, Exp * dr, Exp * mt)
+    : Exp(PRODPLANLIST), map_name(name), exp_demand_result(dr),
+      exp_threshold(mt) {}
+
+  ExecStatus semant();
+
+  ExecStatus execute()
+  {
+    return semant();
+  }
+
+  void free() { }
 };
+
 
 struct Search : public Exp
 {
