@@ -15,7 +15,7 @@ static const char * demand =
   
 
 static const char * load =
-  R"(LOAD <string-exp>"
+  R"(LOAD <string-exp>
 
   Lee el mapa expresado por <string-exp> y retorna un operando
   de tipo Mapa el cual puede almacenarse en una variable

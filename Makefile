@@ -2,8 +2,8 @@ ALEPH = ~/aleph-w
 
 CLANGPATH = /home/lrleon/LLVM-3.8.0/bin
 
-CXX = clang++
-CC = clang
+CXX = $(CLANGPATH)/clang++
+CC = $(CLANGPATH)/clang
 
 FFLAGS=
 
