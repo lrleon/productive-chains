@@ -96,8 +96,8 @@ PRODPLAN     [pP][rR][oO][dD][pP][lL][aA][nN]
 
 SPACE           [ \f\r\t\v]
 
+FLOAT           [[:digit:]]+([\.][[:digit:]]+|[\.][[:digit:]]+[eE][+-]?[[:digit:]]+|[eE][+-]?[[:digit:]]+)
 INTEGER         [[:digit:]]+
-DOUBLE          [+-]?[[:digit:]]+[[\.][[:digit:]]]?[[eE][+-][[:digit:]]+]?
 VARNAME         [[:alpha:]][[:alnum:]_.-]*
 
 %%
@@ -228,16 +228,16 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
   return ERROR;
  }
 
+{FLOAT} { // matches double constant 
+  yylval.symbol = id_table.addstring(yytext);
+  assert(yylval.symbol);
+  return FLOATCONST;  
+}
+
 {INTEGER} { // matches integer constant 
   yylval.symbol = id_table.addstring(yytext);
   assert(yylval.symbol);
   return INTCONST;  
-}
-
-{DOUBLE} { // matches double constant 
-  yylval.symbol = id_table.addstring(yytext);
-  assert(yylval.symbol);
-  return DOUBLECONST;  
 }
 
 {VARNAME} {
@@ -304,12 +304,12 @@ int main()
 # endif
 
   /* signal (SIGINT,my_handler); */
-  // struct sigaction sigIntHandler;
-  // sigIntHandler.sa_handler = my_handler;
-  // sigemptyset(&sigIntHandler.sa_mask);
-  // sigIntHandler.sa_flags = 0;
-  // sigaction(SIGINT, &sigIntHandler, NULL);
-
+  struct sigaction sigIntHandler;
+  sigIntHandler.sa_handler = my_handler;
+  sigemptyset(&sigIntHandler.sa_mask);
+  sigIntHandler.sa_flags = 0;
+  sigaction(SIGINT, &sigIntHandler, NULL);
+  
   if (not resize_process_stack(128*1024*1024))
     cout << "Warning: cannot resize process stack" << endl
 	 << endl;

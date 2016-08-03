@@ -1,6 +1,4 @@
-ALEPHPATH = ~
-
-ALEPH = $(ALEPHPATH)/aleph-w
+ALEPH = ~/aleph-w
 
 CLANGPATH = /usr/bin
 
@@ -135,4 +133,4 @@ prod-plan-graph.o: prod-plan-graph.C
 	$(CXX) $(FLAGS) -c $(INCLUDE) prod-plan-graph.C
 
 demand-satisfaction.o: demand-satisfaction.C
-	$(CXX) $(FLAGS) -c $(INCLUDE) demand-satisfaction.C	
+	$(CXX) $(FLAGS) -c $(INCLUDE) demand-satisfaction.C

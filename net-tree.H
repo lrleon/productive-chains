@@ -47,7 +47,7 @@ struct Exp : public ASTNode
 	      SEARCHPRODUCTRIF, SEARCHNODE, NODE, COVER, REACHABLE,
 	      UPSTREAM, INPUTS, ARCS, SAVE, PATH, RANKS, SHAREHOLDER, RMARC,
 	      RMNODE, HOLDER, HEGEMONY, DEMAND, PRODPLAN, PRODPLANLIST,
-	      TYPEINFO, HELP, DOT, BLOCKS, ERROR, DOUBLECONST, PPDOT } type;
+	      TYPEINFO, HELP, DOT, BLOCKS, ERROR, FLOATCONST, PPDOT } type;
 
   string type_string() const
   {
@@ -57,7 +57,7 @@ struct Exp : public ASTNode
       case LIST: return "LIST";
       case STRCONST: return "STRCONST";
       case INTCONST: return "INTCONST";
-      case DOUBLECONST: return "DOUBLECONST";
+      case FLOATCONST: return "FLOATCONST";
       case VAR: return "VAR";
       case ASSIGN: return "ASSIGN";
       case INFO: return "INFO";
@@ -392,7 +392,7 @@ struct Append : public Exp
 struct Var
 {
   enum VarType { Map, List, String, Int, Producer, Product, Node, 
-		 Cover, Ranks, DemandResult, ProdPlan, Double } var_type;
+		 Cover, Ranks, DemandResult, ProdPlan, Float } var_type;
 
   Var(VarType type) : var_type(type) {}
 
@@ -417,7 +417,7 @@ struct Var
       case Cover: return string("Cover");
       case DemandResult: return string("Demand result");
       case ProdPlan: return string("Production plan");
-      case Double: return string ("Double");
+      case Float: return string ("Float");
       default: AH_ERROR("Invalid type %ld", var_type);
       }
     return string("Var::type_string() var_type invalid");
@@ -731,14 +731,14 @@ struct VarInt : public Var
   string type_info() const { return "Int var"; }
 };
 
-struct VarDouble : public Var
+struct VarFloat : public Var
 {
   double value;
-  VarDouble() : Var(Double) {}
-  VarDouble * clone() const { return new VarDouble; }
-  void copy(Var * src) { value = static_cast<VarDouble*>(src)->value; }
-  string info() const { return "Double var: " + to_string(value); }
-  string type_info() const { return "Double var"; }
+  VarFloat() : Var(Float) {}
+  VarFloat * clone() const { return new VarFloat; }
+  void copy(Var * src) { value = static_cast<VarFloat*>(src)->value; }
+  string info() const { return "Float var: " + to_string(value); }
+  string type_info() const { return "Float var"; }
 };
 
 struct IntExp : public Exp
@@ -750,11 +750,11 @@ struct IntExp : public Exp
   void free() {}
 };
 
-struct DoubleExp : public Exp
+struct FloatExp : public Exp
 {
   const double value;
 
-  DoubleExp(const string & val) : Exp(DOUBLECONST), value(stod(val)) {}
+  FloatExp(const string & val) : Exp(FLOATCONST), value(stod(val)) {}
   ExecStatus execute() { return make_pair(true, ""); }
   void free() {}
 };
