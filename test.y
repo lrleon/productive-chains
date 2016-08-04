@@ -19,12 +19,7 @@
  SymbolTable var_tbl;
 
  ASTList * line_commands = nullptr;
-
- static ExecStatus semant_mapa_or_net(const string &, MetaMapa *&, Net *&);
- 
- static ExecStatus semant_producer(MetaMapa *, Exp *, Productor *&);
- 
- %}
+%}
 
 %union {
   ASTNode * node;
@@ -51,7 +46,7 @@
 %type <rmexp> rm_list
 %type <search_exp> search_cmd
 %type <exp_list> item_list
-%type <expr> decl_prod_set prod_set_items
+%type <expr> prod_set_items
 
 %%
 
@@ -241,18 +236,21 @@ exp : LOAD ref_exp { $$ = new Load(static_cast<StringExp*>($2)); }
 	$$ = new ProdPlan($2, $3, $4, $5);
       }
     | PRODPLAN VARNAME ref_exp ref_exp { $$ = new ProdPlanList($2, $3, $4); }
-    | PRODSET decl_prod_set { $$ = $2; }
+    | PRODSET VARNAME prod_set_items { $$ = new ProducerSetExp($2, $3); }
 ;
 
-decl_prod_set:  { $$ = new ProducerSetExp; }
-             |  prod_set_items { $$ = $1; }
-;
-
-prod_set_items: ref_exp rvalue
+prod_set_items: { $$ = new ExpListExp; }
+              | ref_exp
                 {
+		  auto prod_set = new ExpListExp;
+		  prod_set->append($1);
+		  $$ = prod_set;
                 }
-              | ref_exp prod_set_items ',' rvalue
+              | ref_exp ',' prod_set_items
 	        {
+		  auto prod_set = static_cast<ExpListExp *>($1);
+		  prod_set->append($3);
+		  $$ = prod_set;
 	        }
 ;
 
@@ -1356,6 +1354,38 @@ static pair<ExecStatus, double> semant_float(Exp * float_exp)
     }
 
   return make_pair(make_pair(true, ""), val);
+}
+
+ExecStatus ProducerSetExp::semant()
+{
+  auto r = ::semant_mapa_or_net(map_name, map_ptr, net_ptr);
+  
+  if (not r.first)
+    return r;
+
+  assert(map_ptr != nullptr);
+  assert(exp_set != nullptr);
+
+  auto & list = static_cast<ExpListExp *>(exp_set)->list;
+
+  list.for_each([&] (Exp * item) {
+
+      Productor * producer = nullptr;
+      
+      auto res = semant_producer(map_ptr, item, producer);
+
+      if (not res.first)
+	{
+	  cout << "Warning: " << res.second << endl;
+	  return;
+	}
+
+      assert(producer != nullptr);
+
+      producer_set.append(producer);
+    });
+
+  return make_pair(true, "");
 }
 
 ExecStatus Demand::semant()

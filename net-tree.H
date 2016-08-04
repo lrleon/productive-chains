@@ -48,7 +48,7 @@ struct Exp : public ASTNode
 	      UPSTREAM, INPUTS, ARCS, SAVE, PATH, RANKS, SHAREHOLDER, RMARC,
 	      RMNODE, HOLDER, HEGEMONY, DEMAND, PRODPLAN, PRODPLANLIST,
 	      TYPEINFO, HELP, DOT, BLOCKS, ERROR, FLOATCONST, PPDOT,
-              PRODSET } type;
+              PRODSET, EXPLIST } type;
   
   string type_string() const
   {
@@ -96,6 +96,7 @@ struct Exp : public ASTNode
       case PRODPLAN: return "PRODPLAN";
       case PRODPLANLIST: return "PRODPLANLIST";
       case PRODSET: return "PRODSET";
+      case EXPLIST: return "EXPLIST";
       default: AH_ERROR("Tipo de expresion invalido");
       }
     return string("INVALID");
@@ -779,12 +780,29 @@ struct VarProducer : public Var
   string type_info() const { return "Producer var"; }
 };
 
-struct ProducerSetExp : Exp
+struct ExpListExp : public Exp
+{
+  DynList<Exp *> list;
+
+  ExpListExp() : Exp(EXPLIST) { }
+  ExecStatus execute() { make_pair(true, ""); }
+  void free() {}
+  void append(Exp * e) { list.append(e); }
+};
+
+struct ProducerSetExp : public Exp
 {
   DynSetTree<Productor *, Treap> producer_set;
+  MetaMapa * map_ptr = nullptr;
+  Net * net_ptr = nullptr;
+  string map_name = "";
+  Exp * exp_set = nullptr;
 
   ProducerSetExp() : Exp(PRODSET) {}
-  ExecStatus execute() { return make_pair(true, ""); }
+  ProducerSetExp(const string & name, Exp * set)
+    : Exp(PRODSET), map_name(name), exp_set(set) {}
+  ExecStatus semant();
+  ExecStatus execute() { return semant(); }
   void free() {}
 };
 
