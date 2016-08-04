@@ -47,8 +47,9 @@ struct Exp : public ASTNode
 	      SEARCHPRODUCTRIF, SEARCHNODE, NODE, COVER, REACHABLE,
 	      UPSTREAM, INPUTS, ARCS, SAVE, PATH, RANKS, SHAREHOLDER, RMARC,
 	      RMNODE, HOLDER, HEGEMONY, DEMAND, PRODPLAN, PRODPLANLIST,
-	      TYPEINFO, HELP, DOT, BLOCKS, ERROR, FLOATCONST, PPDOT } type;
-
+	      TYPEINFO, HELP, DOT, BLOCKS, ERROR, FLOATCONST, PPDOT,
+              PRODSET } type;
+  
   string type_string() const
   {
     switch (type)
@@ -94,6 +95,7 @@ struct Exp : public ASTNode
       case RMNODE: return "RMNODE";
       case PRODPLAN: return "PRODPLAN";
       case PRODPLANLIST: return "PRODPLANLIST";
+      case PRODSET: return "PRODSET";
       default: AH_ERROR("Tipo de expresion invalido");
       }
     return string("INVALID");
@@ -392,7 +394,8 @@ struct Append : public Exp
 struct Var
 {
   enum VarType { Map, List, String, Int, Producer, Product, Node, 
-		 Cover, Ranks, DemandResult, ProdPlan, Float } var_type;
+		 Cover, Ranks, DemandResult, ProdPlan, Float,
+		 ProducerSet } var_type;
 
   Var(VarType type) : var_type(type) {}
 
@@ -417,7 +420,8 @@ struct Var
       case Cover: return string("Cover");
       case DemandResult: return string("Demand result");
       case ProdPlan: return string("Production plan");
-      case Float: return string ("Float");
+      case Float: return string("Float");
+      case ProducerSet: return string("Producer set");
       default: AH_ERROR("Invalid type %ld", var_type);
       }
     return string("Var::type_string() var_type invalid");
@@ -775,6 +779,45 @@ struct VarProducer : public Var
   string type_info() const { return "Producer var"; }
 };
 
+struct ProducerSetExp : Exp
+{
+  DynSetTree<Productor *, Treap> producer_set;
+
+  ProducerSetExp() : Exp(PRODSET) {}
+  ExecStatus execute() { return make_pair(true, ""); }
+  void free() {}
+};
+
+struct VarProducerSet : public Var
+{
+  DynSetTree<Productor *, Treap> producer_set;
+
+  VarProducerSet() : Var(ProducerSet) {}
+  
+  Var * clone() const { return new VarProducerSet; }
+  
+  void copy(Var * src) 
+  {
+    producer_set = static_cast<VarProducerSet *>(src)->producer_set; 
+  }
+  
+  string info() const
+  {
+    stringstream sstr;
+
+    sstr << "Producer set var: it contains " << producer_set.size()
+	 << " producers\n";
+
+    /*  producer_set.for_each([](auto item) {
+	cout << item->info() << endl;
+	});*/
+
+    return sstr.str();
+  }
+  
+  string type_info() const { return "Producer set var"; }
+};
+
 struct VarProduct : public Var
 {
   MetaProducto product;
@@ -998,7 +1041,6 @@ struct ProdPlanList : public Exp
 
   void free() { }
 };
-
 
 struct Search : public Exp
 {

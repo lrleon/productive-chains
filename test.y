@@ -20,7 +20,11 @@
 
  ASTList * line_commands = nullptr;
 
-%}
+ static ExecStatus semant_mapa_or_net(const string &, MetaMapa *&, Net *&);
+ 
+ static ExecStatus semant_producer(MetaMapa *, Exp *, Productor *&);
+ 
+ %}
 
 %union {
   ASTNode * node;
@@ -38,7 +42,7 @@
 %token PRODUCT ID REGEX HELP COD TYPEINFO RIF NODE REACHABLE COVER DOT UPSTREAM
 %token INPUTS ARCS OUTPUTS PATH INPUT OUTPUT RANKS SHAREHOLDER HOLDING DEMAND
 %token <symbol> STRCONST INTCONST VARNAME ARC HEGEMONY PRODPLAN FLOATCONST
-%token PPDOT
+%token PPDOT PRODSET
 
 %type <expr> exp
 %type <expr> rvalue
@@ -47,6 +51,7 @@
 %type <rmexp> rm_list
 %type <search_exp> search_cmd
 %type <exp_list> item_list
+%type <expr> decl_prod_set prod_set_items
 
 %%
 
@@ -236,6 +241,19 @@ exp : LOAD ref_exp { $$ = new Load(static_cast<StringExp*>($2)); }
 	$$ = new ProdPlan($2, $3, $4, $5);
       }
     | PRODPLAN VARNAME ref_exp ref_exp { $$ = new ProdPlanList($2, $3, $4); }
+    | PRODSET decl_prod_set { $$ = $2; }
+;
+
+decl_prod_set:  { $$ = new ProducerSetExp; }
+             |  prod_set_items { $$ = $1; }
+;
+
+prod_set_items: ref_exp rvalue
+                {
+                }
+              | ref_exp prod_set_items ',' rvalue
+	        {
+	        }
 ;
 
 ref_exp : STRCONST
@@ -350,6 +368,21 @@ ExecStatus Assign::execute()
   stringstream s;
   switch (right_side->type)
     {
+    case Exp::Type::PRODSET:
+      {
+	auto var = left_side->get_value_ptr();
+	
+	if (var == nullptr)
+	  {
+	    var = new VarProducerSet;
+	    left_side->set_value_ptr(var);
+	  }
+
+	swap(static_cast<VarProducerSet *>(var)->producer_set,
+	     static_cast<ProducerSetExp *>(right_side)->producer_set);
+	delete right_side;
+	return make_pair(true, "");
+      }
     case Exp::Type::DEMAND:
       {
 	auto var = left_side->get_value_ptr();
@@ -820,6 +853,7 @@ static ExecStatus semant_producer(MetaMapa * mapa_ptr,
 
   return make_pair(true, "");
 }
+
 
 static ExecStatus semant_product(MetaMapa * mapa_ptr, 
 				 Exp * product_exp, 

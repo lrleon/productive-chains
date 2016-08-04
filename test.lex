@@ -93,6 +93,7 @@ ARC          [aA][rR][cC]
 HEGEMONY     [hH][eE][gG][eE][mM][oO][nN][yY]
 DEMAND       [dD][eE][mM][aA][nN][dD]
 PRODPLAN     [pP][rR][oO][dD][pP][lL][aA][nN]
+PRODUCERSET  [pP][rR][oO][dD][uU][cC][eE][rR][sS][eE][tT]
 
 SPACE           [ \f\r\t\v]
 
@@ -110,43 +111,44 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
   * Keywords are case-insensitive except for the values true and false,
   * which must begin with a lower-case letter.
   */
-{LOAD}       return LOAD; 
-{SAVE}       return SAVE;
-{EXIT}       return EXIT;
-{INFO}       return INFO;
-{LS}         return LS;
-{RM}         return RM;
-{SEARCH}     return SEARCH;
-{PRODUCER}   return PRODUCER;
-{PRODUCERS}  return PRODUCERS;
-{PRODUCT}    return PRODUCT;
-{REGEX}      return REGEX;
-{ID}         return ID;
-{LIST}       return LIST;
-{APPEND}     return APPEND;
-{COD}        return COD;
-{TYPE}       return TYPEINFO;
-({HELP}|\?)  return HELP;
-{RIF}        return RIF;
-{NODE}       return NODE;
-{REACHABLE}  return REACHABLE;
-{COVER}      return COVER;
-{DOT}        return DOT;
-{PPDOT}      return PPDOT;
-{UPSTREAM}   return UPSTREAM;
-{INPUT}      return INPUT;
-{OUTPUT}     return OUTPUT;
-{INPUTS}     return INPUTS;
-{OUTPUTS}    return OUTPUTS;
-{ARCS}       return ARCS;
-{PATH}       return PATH;
-{RANKS}      return RANKS;
+{LOAD}        return LOAD; 
+{SAVE}        return SAVE;
+{EXIT}        return EXIT;
+{INFO}        return INFO;
+{LS}          return LS;
+{RM}          return RM;
+{SEARCH}      return SEARCH;
+{PRODUCER}    return PRODUCER;
+{PRODUCERS}   return PRODUCERS;
+{PRODUCT}     return PRODUCT;
+{REGEX}       return REGEX;
+{ID}          return ID;
+{LIST}        return LIST;
+{APPEND}      return APPEND;
+{COD}         return COD;
+{TYPE}        return TYPEINFO;
+({HELP}|\?)   return HELP;
+{RIF}         return RIF;
+{NODE}        return NODE;
+{REACHABLE}   return REACHABLE;
+{COVER}       return COVER;
+{DOT}         return DOT;
+{PPDOT}       return PPDOT;
+{UPSTREAM}    return UPSTREAM;
+{INPUT}       return INPUT;
+{OUTPUT}      return OUTPUT;
+{INPUTS}      return INPUTS;
+{OUTPUTS}     return OUTPUTS;
+{ARCS}        return ARCS;
+{PATH}        return PATH;
+{RANKS}       return RANKS;
 {SHAREHOLDER} return SHAREHOLDER;
-{HOLDING}    return HOLDING;
-{ARC}        return ARC;
-{HEGEMONY}   return HEGEMONY;
-{DEMAND}     return DEMAND;
-{PRODPLAN}   return PRODPLAN;
+{HOLDING}     return HOLDING;
+{ARC}         return ARC;
+{HEGEMONY}    return HEGEMONY;
+{DEMAND}      return DEMAND;
+{PRODPLAN}    return PRODPLAN;
+{PRODUCERSET} return PRODSET;
 
  /*
   * The single-characters tokens 
