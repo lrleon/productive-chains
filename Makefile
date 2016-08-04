@@ -1,9 +1,4 @@
-<<<<<<< HEAD
-
-ALEPH = /home/lrleon/Aleph-w
-=======
-ALEPH = ~/aleph-w
->>>>>>> cbf89ecb8a23033cfd30ffdf9f6d7c4191243713
+ALEPH = ~/Aleph-w
 
 CLANGPATH = /usr/bin
 

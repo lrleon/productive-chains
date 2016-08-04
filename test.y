@@ -236,21 +236,21 @@ exp : LOAD ref_exp { $$ = new Load(static_cast<StringExp*>($2)); }
 	$$ = new ProdPlan($2, $3, $4, $5);
       }
     | PRODPLAN VARNAME ref_exp ref_exp { $$ = new ProdPlanList($2, $3, $4); }
-    | PRODSET VARNAME prod_set_items { $$ = new ProducerSetExp($2, $3); }
+    | PRODSET VARNAME '{' prod_set_items '}' { $$ = new ProducerSetExp(); }
+    | PRODSET VARNAME '{' '}' {  $$ = new ProducerSetExp(); }
 ;
 
-prod_set_items: { $$ = new ExpListExp; }
-              | ref_exp
+prod_set_items: ref_exp
                 {
-		  auto prod_set = new ExpListExp;
-		  prod_set->append($1);
-		  $$ = prod_set;
+		  /* auto prod_set = new ExpListExp; */
+		  /* prod_set->append($1); */
+		  /* $$ = prod_set; */
                 }
-              | ref_exp ',' prod_set_items
+              | prod_set_items ',' ref_exp
 	        {
-		  auto prod_set = static_cast<ExpListExp *>($1);
-		  prod_set->append($3);
-		  $$ = prod_set;
+		  /* auto prod_set = static_cast<ExpListExp *>($1); */
+		  /* prod_set->append($3); */
+		  /* $$ = prod_set; */
 	        }
 ;
 

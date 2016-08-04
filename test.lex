@@ -97,11 +97,8 @@ PRODUCERSET  [pP][rR][oO][dD][uU][cC][eE][rR][sS][eE][tT]
 
 SPACE           [ \f\r\t\v]
 
-<<<<<<< HEAD
-DOUBLE          [+-]?[[:digit:]]+[[\.][[:digit:]]]?[[eE][+-][[:digit:]]+]?
-=======
 FLOAT           [[:digit:]]+([\.][[:digit:]]+|[\.][[:digit:]]+[eE][+-]?[[:digit:]]+|[eE][+-]?[[:digit:]]+)
->>>>>>> cbf89ecb8a23033cfd30ffdf9f6d7c4191243713
+
 INTEGER         [[:digit:]]+
 VARNAME         [[:alpha:]][[:alnum:]_.-]*
 
@@ -160,6 +157,9 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
 [=;]          return *yytext;
 "["           return *yytext;
 "]"           return *yytext;
+"{"           return *yytext;
+"}"           return *yytext;
+","           return *yytext;
 
 
  /*
@@ -240,12 +240,7 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
   return FLOATCONST;  
 }
 
-<<<<<<< HEAD
-{DOUBLE} { // matches double constant 
-  cout << "**** Matches double ****" << endl;
-=======
 {INTEGER} { // matches integer constant 
->>>>>>> cbf89ecb8a23033cfd30ffdf9f6d7c4191243713
   yylval.symbol = id_table.addstring(yytext);
   assert(yylval.symbol);
   return INTCONST;  
@@ -320,11 +315,7 @@ int main()
   sigemptyset(&sigIntHandler.sa_mask);
   sigIntHandler.sa_flags = 0;
   sigaction(SIGINT, &sigIntHandler, NULL);
-<<<<<<< HEAD
 
-=======
-  
->>>>>>> cbf89ecb8a23033cfd30ffdf9f6d7c4191243713
   if (not resize_process_stack(128*1024*1024))
     cout << "Warning: cannot resize process stack" << endl
 	 << endl;
