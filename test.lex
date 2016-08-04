@@ -96,8 +96,8 @@ PRODPLAN     [pP][rR][oO][dD][pP][lL][aA][nN]
 
 SPACE           [ \f\r\t\v]
 
-INTEGER         [[:digit:]]+
 DOUBLE          [+-]?[[:digit:]]+[[\.][[:digit:]]]?[[eE][+-][[:digit:]]+]?
+INTEGER         [[:digit:]]+
 VARNAME         [[:alpha:]][[:alnum:]_.-]*
 
 %%
@@ -235,6 +235,7 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
 }
 
 {DOUBLE} { // matches double constant 
+  cout << "**** Matches double ****" << endl;
   yylval.symbol = id_table.addstring(yytext);
   assert(yylval.symbol);
   return DOUBLECONST;  
@@ -304,11 +305,11 @@ int main()
 # endif
 
   /* signal (SIGINT,my_handler); */
-  // struct sigaction sigIntHandler;
-  // sigIntHandler.sa_handler = my_handler;
-  // sigemptyset(&sigIntHandler.sa_mask);
-  // sigIntHandler.sa_flags = 0;
-  // sigaction(SIGINT, &sigIntHandler, NULL);
+  struct sigaction sigIntHandler;
+  sigIntHandler.sa_handler = my_handler;
+  sigemptyset(&sigIntHandler.sa_mask);
+  sigIntHandler.sa_flags = 0;
+  sigaction(SIGINT, &sigIntHandler, NULL);
 
   if (not resize_process_stack(128*1024*1024))
     cout << "Warning: cannot resize process stack" << endl

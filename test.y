@@ -281,7 +281,7 @@ rvalue: VARNAME
 
 void yyerror(char const * s) 
 {
-  cout << "Sintax error" << endl
+  cout << "Syntax error" << endl
        << endl
        << "Make sure that you are not using as identifier any of the" << endl
        << "following reserved words:" << endl

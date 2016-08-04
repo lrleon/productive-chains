@@ -1277,6 +1277,7 @@ case 56:
 YY_RULE_SETUP
 #line 237 "test.lex"
 { // matches double constant 
+  cout << "**** Matches double ****" << endl;
   yylval.symbol = id_table.addstring(yytext);
   assert(yylval.symbol);
   return DOUBLECONST;  
@@ -1284,7 +1285,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 57:
 YY_RULE_SETUP
-#line 243 "test.lex"
+#line 244 "test.lex"
 {
   yylval.symbol = string_table.addstring(yytext);
   assert(yylval.symbol);
@@ -1293,7 +1294,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 58:
 YY_RULE_SETUP
-#line 249 "test.lex"
+#line 250 "test.lex"
 {
   yylval.error_msg = yytext;
   return ERROR; 
@@ -1301,10 +1302,10 @@ YY_RULE_SETUP
 	YY_BREAK
 case 59:
 YY_RULE_SETUP
-#line 255 "test.lex"
+#line 256 "test.lex"
 ECHO;
 	YY_BREAK
-#line 1308 "test.C"
+#line 1309 "test.C"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
@@ -2305,7 +2306,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 255 "test.lex"
+#line 256 "test.lex"
 
 
 
@@ -2359,11 +2360,11 @@ int main()
 # endif
 
   /* signal (SIGINT,my_handler); */
-  // struct sigaction sigIntHandler;
-  // sigIntHandler.sa_handler = my_handler;
-  // sigemptyset(&sigIntHandler.sa_mask);
-  // sigIntHandler.sa_flags = 0;
-  // sigaction(SIGINT, &sigIntHandler, NULL);
+  struct sigaction sigIntHandler;
+  sigIntHandler.sa_handler = my_handler;
+  sigemptyset(&sigIntHandler.sa_mask);
+  sigIntHandler.sa_flags = 0;
+  sigaction(SIGINT, &sigIntHandler, NULL);
 
   if (not resize_process_stack(128*1024*1024))
     cout << "Warning: cannot resize process stack" << endl

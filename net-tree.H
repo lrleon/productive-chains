@@ -932,7 +932,10 @@ struct Demand : public Exp
   
   Demand(const string & name, Exp * id, Exp * q, Exp * mt)
     : Exp(DEMAND), map_name(name), exp_id(id), exp_quantity(q),
-      exp_threshold(mt) {}
+      exp_threshold(mt)
+  {
+    cout << "Reconozco " << q->type_string() << endl; // TMP
+  }
 
   ExecStatus semant();
 
