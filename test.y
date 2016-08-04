@@ -20,7 +20,11 @@
 
  ASTList * line_commands = nullptr;
 
-%}
+ static ExecStatus semant_mapa_or_net(const string &, MetaMapa *&, Net *&);
+ 
+ static ExecStatus semant_producer(MetaMapa *, Exp *, Productor *&);
+ 
+ %}
 
 %union {
   ASTNode * node;
@@ -37,8 +41,8 @@
 %token LOAD SAVE EXIT ERROR INFO LS RM SEARCH PRODUCER PRODUCERS LIST APPEND
 %token PRODUCT ID REGEX HELP COD TYPEINFO RIF NODE REACHABLE COVER DOT UPSTREAM
 %token INPUTS ARCS OUTPUTS PATH INPUT OUTPUT RANKS SHAREHOLDER HOLDING DEMAND
-%token <symbol> STRCONST INTCONST VARNAME ARC HEGEMONY PRODPLAN DOUBLECONST
-%token PPDOT
+%token <symbol> STRCONST INTCONST VARNAME ARC HEGEMONY PRODPLAN FLOATCONST
+%token PPDOT PRODSET
 
 %type <expr> exp
 %type <expr> rvalue
@@ -47,6 +51,7 @@
 %type <rmexp> rm_list
 %type <search_exp> search_cmd
 %type <exp_list> item_list
+%type <expr> decl_prod_set prod_set_items
 
 %%
 
@@ -236,6 +241,19 @@ exp : LOAD ref_exp { $$ = new Load(static_cast<StringExp*>($2)); }
 	$$ = new ProdPlan($2, $3, $4, $5);
       }
     | PRODPLAN VARNAME ref_exp ref_exp { $$ = new ProdPlanList($2, $3, $4); }
+    | PRODSET decl_prod_set { $$ = $2; }
+;
+
+decl_prod_set:  { $$ = new ProducerSetExp; }
+             |  prod_set_items { $$ = $1; }
+;
+
+prod_set_items: ref_exp rvalue
+                {
+                }
+              | ref_exp prod_set_items ',' rvalue
+	        {
+	        }
 ;
 
 ref_exp : STRCONST
@@ -250,11 +268,11 @@ ref_exp : STRCONST
 	      auto symbol = id_table($1);
 	      $$ = new IntExp(symbol);
 	    }
-          | DOUBLECONST
+          | FLOATCONST
 	  {
 	    assert(id_table($1) == $1);
 	    auto symbol = id_table($1);
-	    $$ = new DoubleExp(symbol);
+	    $$ = new FloatExp(symbol);
 	  }
           | rvalue
 	    {
@@ -350,6 +368,21 @@ ExecStatus Assign::execute()
   stringstream s;
   switch (right_side->type)
     {
+    case Exp::Type::PRODSET:
+      {
+	auto var = left_side->get_value_ptr();
+	
+	if (var == nullptr)
+	  {
+	    var = new VarProducerSet;
+	    left_side->set_value_ptr(var);
+	  }
+
+	swap(static_cast<VarProducerSet *>(var)->producer_set,
+	     static_cast<ProducerSetExp *>(right_side)->producer_set);
+	delete right_side;
+	return make_pair(true, "");
+      }
     case Exp::Type::DEMAND:
       {
 	auto var = left_side->get_value_ptr();
@@ -821,6 +854,7 @@ static ExecStatus semant_producer(MetaMapa * mapa_ptr,
   return make_pair(true, "");
 }
 
+
 static ExecStatus semant_product(MetaMapa * mapa_ptr, 
 				 Exp * product_exp, 
 				 MetaProducto *& product_ptr)
@@ -1281,23 +1315,26 @@ static pair<ExecStatus, long> semant_int(Exp * int_exp)
   return make_pair(make_pair(true, ""), id);
 }
 
-static pair<ExecStatus, double> semant_double(Exp * double_exp)
+static pair<ExecStatus, double> semant_float(Exp * float_exp)
 {
   double val = 0.0;
 
-  auto r = double_exp->execute();
+  auto r = float_exp->execute();
   if (not r.first)
     return make_pair(r, val);
 
-  switch (double_exp->type)
+  switch (float_exp->type)
     {
-    case Exp::Type::DOUBLECONST:
-      val = static_cast<DoubleExp*>(double_exp)->value;
+    case Exp::Type::INTCONST:
+      val = (double) static_cast<IntExp *>(float_exp)->value;
+      break;
+    case Exp::Type::FLOATCONST:
+      val = static_cast<FloatExp *>(float_exp)->value;
       break;
     case Exp::Type::VAR:
       {
 	stringstream s;
-	auto varname = static_cast<Varname*>(double_exp);
+	auto varname = static_cast<Varname*>(float_exp);
 	auto var = varname->get_value_ptr();
 	if (var == nullptr)
 	  {
@@ -1305,17 +1342,17 @@ static pair<ExecStatus, double> semant_double(Exp * double_exp)
 	      << "THIS IS PROBABLY A BUG. PLEASE REPORT IT!";
 	    return make_pair(make_pair(false, s.str()), val);
 	  }
-	if (var->var_type != Var::VarType::Double)
+	if (var->var_type != Var::VarType::Float)
 	  {
-	    s << "Var name " << varname->name << " is not an double type";
+	    s << "Var name " << varname->name << " is not an float type";
 	    return make_pair(make_pair(false, s.str()), val);
 	  }
-	val = static_cast<VarDouble*>(var)->value;
+	val = static_cast<VarFloat *>(var)->value;
 	break;
       }
     default: 
       return make_pair(make_pair(false, 
-				 "Expression type if not a double type"), val);
+				 "Expression type if not a float type"), val);
     }
 
   return make_pair(make_pair(true, ""), val);
@@ -1335,7 +1372,7 @@ ExecStatus Demand::semant()
   if (not pres.first)
     return pres;
   
-  auto qres = semant_int(exp_quantity);
+  auto qres = semant_float(exp_quantity);
 
   if (not qres.first.first)
     return qres.first;
@@ -1381,7 +1418,7 @@ ExecStatus ProdPlan::semant()
   if (not pres.first)
     return pres;
   
-  auto qres = semant_int(exp_quantity);
+  auto qres = semant_float(exp_quantity);
 
   if (not qres.first.first)
     return qres.first;

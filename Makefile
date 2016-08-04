@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 
 ALEPH = /home/lrleon/Aleph-w
+=======
+ALEPH = ~/aleph-w
+>>>>>>> cbf89ecb8a23033cfd30ffdf9f6d7c4191243713
 
 CLANGPATH = /usr/bin
 
@@ -134,4 +138,4 @@ prod-plan-graph.o: prod-plan-graph.C
 	$(CXX) $(FLAGS) -c $(INCLUDE) prod-plan-graph.C
 
 demand-satisfaction.o: demand-satisfaction.C
-	$(CXX) $(FLAGS) -c $(INCLUDE) demand-satisfaction.C	
+	$(CXX) $(FLAGS) -c $(INCLUDE) demand-satisfaction.C

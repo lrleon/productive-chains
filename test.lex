@@ -93,10 +93,15 @@ ARC          [aA][rR][cC]
 HEGEMONY     [hH][eE][gG][eE][mM][oO][nN][yY]
 DEMAND       [dD][eE][mM][aA][nN][dD]
 PRODPLAN     [pP][rR][oO][dD][pP][lL][aA][nN]
+PRODUCERSET  [pP][rR][oO][dD][uU][cC][eE][rR][sS][eE][tT]
 
 SPACE           [ \f\r\t\v]
 
+<<<<<<< HEAD
 DOUBLE          [+-]?[[:digit:]]+[[\.][[:digit:]]]?[[eE][+-][[:digit:]]+]?
+=======
+FLOAT           [[:digit:]]+([\.][[:digit:]]+|[\.][[:digit:]]+[eE][+-]?[[:digit:]]+|[eE][+-]?[[:digit:]]+)
+>>>>>>> cbf89ecb8a23033cfd30ffdf9f6d7c4191243713
 INTEGER         [[:digit:]]+
 VARNAME         [[:alpha:]][[:alnum:]_.-]*
 
@@ -110,43 +115,44 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
   * Keywords are case-insensitive except for the values true and false,
   * which must begin with a lower-case letter.
   */
-{LOAD}       return LOAD; 
-{SAVE}       return SAVE;
-{EXIT}       return EXIT;
-{INFO}       return INFO;
-{LS}         return LS;
-{RM}         return RM;
-{SEARCH}     return SEARCH;
-{PRODUCER}   return PRODUCER;
-{PRODUCERS}  return PRODUCERS;
-{PRODUCT}    return PRODUCT;
-{REGEX}      return REGEX;
-{ID}         return ID;
-{LIST}       return LIST;
-{APPEND}     return APPEND;
-{COD}        return COD;
-{TYPE}       return TYPEINFO;
-({HELP}|\?)  return HELP;
-{RIF}        return RIF;
-{NODE}       return NODE;
-{REACHABLE}  return REACHABLE;
-{COVER}      return COVER;
-{DOT}        return DOT;
-{PPDOT}      return PPDOT;
-{UPSTREAM}   return UPSTREAM;
-{INPUT}      return INPUT;
-{OUTPUT}     return OUTPUT;
-{INPUTS}     return INPUTS;
-{OUTPUTS}    return OUTPUTS;
-{ARCS}       return ARCS;
-{PATH}       return PATH;
-{RANKS}      return RANKS;
+{LOAD}        return LOAD; 
+{SAVE}        return SAVE;
+{EXIT}        return EXIT;
+{INFO}        return INFO;
+{LS}          return LS;
+{RM}          return RM;
+{SEARCH}      return SEARCH;
+{PRODUCER}    return PRODUCER;
+{PRODUCERS}   return PRODUCERS;
+{PRODUCT}     return PRODUCT;
+{REGEX}       return REGEX;
+{ID}          return ID;
+{LIST}        return LIST;
+{APPEND}      return APPEND;
+{COD}         return COD;
+{TYPE}        return TYPEINFO;
+({HELP}|\?)   return HELP;
+{RIF}         return RIF;
+{NODE}        return NODE;
+{REACHABLE}   return REACHABLE;
+{COVER}       return COVER;
+{DOT}         return DOT;
+{PPDOT}       return PPDOT;
+{UPSTREAM}    return UPSTREAM;
+{INPUT}       return INPUT;
+{OUTPUT}      return OUTPUT;
+{INPUTS}      return INPUTS;
+{OUTPUTS}     return OUTPUTS;
+{ARCS}        return ARCS;
+{PATH}        return PATH;
+{RANKS}       return RANKS;
 {SHAREHOLDER} return SHAREHOLDER;
-{HOLDING}    return HOLDING;
-{ARC}        return ARC;
-{HEGEMONY}   return HEGEMONY;
-{DEMAND}     return DEMAND;
-{PRODPLAN}   return PRODPLAN;
+{HOLDING}     return HOLDING;
+{ARC}         return ARC;
+{HEGEMONY}    return HEGEMONY;
+{DEMAND}      return DEMAND;
+{PRODPLAN}    return PRODPLAN;
+{PRODUCERSET} return PRODSET;
 
  /*
   * The single-characters tokens 
@@ -228,17 +234,21 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
   return ERROR;
  }
 
+{FLOAT} { // matches double constant 
+  yylval.symbol = id_table.addstring(yytext);
+  assert(yylval.symbol);
+  return FLOATCONST;  
+}
+
+<<<<<<< HEAD
+{DOUBLE} { // matches double constant 
+  cout << "**** Matches double ****" << endl;
+=======
 {INTEGER} { // matches integer constant 
+>>>>>>> cbf89ecb8a23033cfd30ffdf9f6d7c4191243713
   yylval.symbol = id_table.addstring(yytext);
   assert(yylval.symbol);
   return INTCONST;  
-}
-
-{DOUBLE} { // matches double constant 
-  cout << "**** Matches double ****" << endl;
-  yylval.symbol = id_table.addstring(yytext);
-  assert(yylval.symbol);
-  return DOUBLECONST;  
 }
 
 {VARNAME} {
@@ -310,7 +320,11 @@ int main()
   sigemptyset(&sigIntHandler.sa_mask);
   sigIntHandler.sa_flags = 0;
   sigaction(SIGINT, &sigIntHandler, NULL);
+<<<<<<< HEAD
 
+=======
+  
+>>>>>>> cbf89ecb8a23033cfd30ffdf9f6d7c4191243713
   if (not resize_process_stack(128*1024*1024))
     cout << "Warning: cannot resize process stack" << endl
 	 << endl;
