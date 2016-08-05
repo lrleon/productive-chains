@@ -48,7 +48,7 @@ struct Exp : public ASTNode
 	      UPSTREAM, INPUTS, ARCS, SAVE, PATH, RANKS, SHAREHOLDER, RMARC,
 	      RMNODE, HOLDER, HEGEMONY, DEMAND, PRODPLAN, PRODPLANLIST,
 	      TYPEINFO, HELP, DOT, BLOCKS, ERROR, FLOATCONST, PPDOT,
-              PRODSET, EXPLIST } type;
+              PRODSET, EXPLIST, ADDPRODUCERSET, RMPRODUCERSET } type;
   
   string type_string() const
   {
@@ -97,6 +97,8 @@ struct Exp : public ASTNode
       case PRODPLANLIST: return "PRODPLANLIST";
       case PRODSET: return "PRODSET";
       case EXPLIST: return "EXPLIST";
+      case ADDPRODUCERSET: return "ADDPRODUCERSET";
+      case RMPRODUCERSET: return "RMPRODUCERSET";
       default: AH_ERROR("Tipo de expresion invalido");
       }
     return string("INVALID");
@@ -798,9 +800,43 @@ struct ProducerSetExp : public Exp
   string map_name = "";
   Exp * exp_set = nullptr;
 
-  ProducerSetExp() : Exp(PRODSET) {}
+  ProducerSetExp(const string & name) : Exp(PRODSET), map_name(name) {}
   ProducerSetExp(const string & name, Exp * set)
     : Exp(PRODSET), map_name(name), exp_set(set) {}
+  ExecStatus semant();
+  ExecStatus execute() { return semant(); }
+  void free() {}
+};
+
+struct AddProducerSetExp : public Exp
+{
+  DynSetTree<Productor *, Treap> * producer_set = nullptr;
+  MetaMapa * map_ptr = nullptr;
+  Net * net_ptr = nullptr;
+  string map_name = "";
+  string set_name = "";
+  Exp * exp_set = nullptr;
+
+  AddProducerSetExp(const string & mname, const string & sname, Exp * exp)
+    : Exp(ADDPRODUCERSET), map_name(mname), set_name(sname), exp_set(exp) { }
+
+  ExecStatus semant();
+  ExecStatus execute() { return semant(); }
+  void free() {}
+};
+
+struct RmProducerSetExp : public Exp
+{
+  DynSetTree<Productor *, Treap> * producer_set = nullptr;
+  MetaMapa * map_ptr = nullptr;
+  Net * net_ptr = nullptr;
+  string map_name = "";
+  string set_name = "";
+  Exp * exp_set = nullptr;
+
+  RmProducerSetExp(const string & mname, const string & sname, Exp * exp)
+    : Exp(RMPRODUCERSET), map_name(mname), set_name(sname), exp_set(exp) { }
+
   ExecStatus semant();
   ExecStatus execute() { return semant(); }
   void free() {}
@@ -809,14 +845,16 @@ struct ProducerSetExp : public Exp
 struct VarProducerSet : public Var
 {
   DynSetTree<Productor *, Treap> producer_set;
-
+  MetaMapa * map_ptr = nullptr;
+  
   VarProducerSet() : Var(ProducerSet) {}
   
   Var * clone() const { return new VarProducerSet; }
   
   void copy(Var * src) 
   {
-    producer_set = static_cast<VarProducerSet *>(src)->producer_set; 
+    producer_set = static_cast<VarProducerSet *>(src)->producer_set;
+    map_ptr = static_cast<VarProducerSet *>(src)->map_ptr;
   }
   
   string info() const
@@ -826,10 +864,10 @@ struct VarProducerSet : public Var
     sstr << "Producer set var: it contains " << producer_set.size()
 	 << " producers\n";
 
-    /*  producer_set.for_each([](auto item) {
-	cout << item->info() << endl;
-	});*/
-
+    producer_set.for_each([&](auto item) {
+	sstr << item->rif << endl;
+      });
+    
     return sstr.str();
   }
   

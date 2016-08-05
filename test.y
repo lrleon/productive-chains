@@ -37,7 +37,7 @@
 %token PRODUCT ID REGEX HELP COD TYPEINFO RIF NODE REACHABLE COVER DOT UPSTREAM
 %token INPUTS ARCS OUTPUTS PATH INPUT OUTPUT RANKS SHAREHOLDER HOLDING DEMAND
 %token <symbol> STRCONST INTCONST VARNAME ARC HEGEMONY PRODPLAN FLOATCONST
-%token PPDOT PRODSET
+%token PPDOT PRODSET ADDPRODSET RMPRODSET
 
 %type <expr> exp
 %type <expr> rvalue
@@ -140,6 +140,14 @@ cmd_unit: EXIT
 	  }
         | RM ARC VARNAME ref_exp { $$ = new RmArcId($3, $4); }
         | RM NODE VARNAME ref_exp { $$ = new RmNode($3, $4); }
+        | ADDPRODSET VARNAME VARNAME '{' prod_set_items '}'
+	  {
+	    $$ = new AddProducerSetExp($2, $3, $5);
+	  }
+        | RMPRODSET VARNAME VARNAME '{' prod_set_items '}'
+	  {
+	    $$ = new RmProducerSetExp($2, $3, $5);
+	  }
 ;
 
 
@@ -236,21 +244,21 @@ exp : LOAD ref_exp { $$ = new Load(static_cast<StringExp*>($2)); }
 	$$ = new ProdPlan($2, $3, $4, $5);
       }
     | PRODPLAN VARNAME ref_exp ref_exp { $$ = new ProdPlanList($2, $3, $4); }
-    | PRODSET VARNAME '{' prod_set_items '}' { $$ = new ProducerSetExp(); }
-    | PRODSET VARNAME '{' '}' {  $$ = new ProducerSetExp(); }
+    | PRODSET VARNAME '{' prod_set_items '}' { $$ = new ProducerSetExp($2, $4); }
+    | PRODSET VARNAME '{' '}' {  $$ = new ProducerSetExp($2); }
 ;
 
 prod_set_items: ref_exp
                 {
-		  /* auto prod_set = new ExpListExp; */
-		  /* prod_set->append($1); */
-		  /* $$ = prod_set; */
+		  auto prod_set = new ExpListExp;
+		  prod_set->append($1);
+		  $$ = prod_set;
                 }
               | prod_set_items ',' ref_exp
 	        {
-		  /* auto prod_set = static_cast<ExpListExp *>($1); */
-		  /* prod_set->append($3); */
-		  /* $$ = prod_set; */
+		  auto prod_set = static_cast<ExpListExp *>($1);
+		  prod_set->append($3);
+		  $$ = prod_set;
 	        }
 ;
 
@@ -378,6 +386,8 @@ ExecStatus Assign::execute()
 
 	swap(static_cast<VarProducerSet *>(var)->producer_set,
 	     static_cast<ProducerSetExp *>(right_side)->producer_set);
+	swap(static_cast<VarProducerSet *>(var)->map_ptr,
+	     static_cast<ProducerSetExp *>(right_side)->map_ptr);
 	delete right_side;
 	return make_pair(true, "");
       }
@@ -1356,6 +1366,28 @@ static pair<ExecStatus, double> semant_float(Exp * float_exp)
   return make_pair(make_pair(true, ""), val);
 }
 
+void add_producers_to_set(MetaMapa * map_ptr,
+			  DynSetTree<Productor *, Treap> & producer_set,
+			  DynList<Exp *> & list)
+{
+  list.for_each([&] (Exp * item) {
+      
+      Productor * producer = nullptr;
+      
+      auto res = semant_producer(map_ptr, item, producer);
+      
+      if (not res.first)
+	{
+	  cout << "Warning: " << res.second << endl;
+	  return;
+	}
+      
+      assert(producer != nullptr);
+      
+      producer_set.append(producer);
+    });
+}
+
 ExecStatus ProducerSetExp::semant()
 {
   auto r = ::semant_mapa_or_net(map_name, map_ptr, net_ptr);
@@ -1364,26 +1396,115 @@ ExecStatus ProducerSetExp::semant()
     return r;
 
   assert(map_ptr != nullptr);
+
+  if (exp_set == nullptr)
+    return make_pair(true, "");
+
+  auto & list = static_cast<ExpListExp *>(exp_set)->list;
+
+  add_producers_to_set(map_ptr, producer_set, list);
+
+  delete exp_set;
+
+  return make_pair(true, "");
+}
+
+static ExecStatus semant_prodset(const string & set_name,
+				 DynSetTree<Productor *, Treap> *& producer_set,
+				 MetaMapa * map_ptr)
+{
+  producer_set = nullptr;
+  stringstream s;
+  Varname * prod_set = var_tbl(set_name);
+  if (prod_set == nullptr)
+    {
+      s << "Producer set var " << set_name << " not found";
+      return make_pair(false, s.str());
+    }
+
+  VarProducerSet * ptr = static_cast<VarProducerSet*>(prod_set->get_value_ptr());
+  if (ptr== nullptr)
+    {
+      s << "Producer set var"  << set_name << " has not a associated value"
+	<< "THIS PROBABLY IS A BUG. PLEASE REPORT IT";
+      return make_pair(false, s.str());
+    }
+
+  if (ptr->map_ptr != map_ptr)
+    {
+      s << "Map in producer set map is not the same map in operation";
+      return make_pair(false, s.str());
+    }
+  
+  producer_set = &ptr->producer_set;
+
+  return make_pair(true, "");
+}
+
+ExecStatus AddProducerSetExp::semant()
+{
+  auto r1 = ::semant_mapa_or_net(map_name, map_ptr, net_ptr);
+  
+  if (not r1.first)
+    return r1;
+
+  assert(map_ptr != nullptr);
+
+  auto r2 = semant_prodset(set_name, producer_set, map_ptr);
+
+  if (not r2.first)
+    return r2;
+
+  assert(producer_set != nullptr);
+  
   assert(exp_set != nullptr);
 
   auto & list = static_cast<ExpListExp *>(exp_set)->list;
 
-  list.for_each([&] (Exp * item) {
+  add_producers_to_set(map_ptr, *producer_set, list);
 
+  delete exp_set;
+
+  return make_pair(true, "");
+}
+
+ExecStatus RmProducerSetExp::semant()
+{
+  auto r1 = ::semant_mapa_or_net(map_name, map_ptr, net_ptr);
+  
+  if (not r1.first)
+    return r1;
+
+  assert(map_ptr != nullptr);
+
+  auto r2 = semant_prodset(set_name, producer_set, map_ptr);
+
+  if (not r2.first)
+    return r2;
+
+  assert(producer_set != nullptr);
+  
+  assert(exp_set != nullptr);
+
+  auto & list = static_cast<ExpListExp *>(exp_set)->list;
+
+  list.for_each([&](auto item) {
       Productor * producer = nullptr;
       
       auto res = semant_producer(map_ptr, item, producer);
-
+      
       if (not res.first)
 	{
 	  cout << "Warning: " << res.second << endl;
 	  return;
 	}
-
+      
       assert(producer != nullptr);
-
-      producer_set.append(producer);
+      
+      producer_set->remove(producer);
     });
+
+  delete exp_set;
 
   return make_pair(true, "");
 }

@@ -94,6 +94,8 @@ HEGEMONY     [hH][eE][gG][eE][mM][oO][nN][yY]
 DEMAND       [dD][eE][mM][aA][nN][dD]
 PRODPLAN     [pP][rR][oO][dD][pP][lL][aA][nN]
 PRODUCERSET  [pP][rR][oO][dD][uU][cC][eE][rR][sS][eE][tT]
+ADDTOPRODUCERSET [aA][dD][dD][tT][oO][pP][rR][oO][dD][uU][cC][eE][rR][sS][eE][tT]
+RMFROMPRODUCERSET [rR][mM][fF][rR][oO][mM][pP][rR][oO][dD][uU][cC][eE][rR][sS][eE][tT]
 
 SPACE           [ \f\r\t\v]
 
@@ -150,6 +152,8 @@ VARNAME         [[:alpha:]][[:alnum:]_.-]*
 {DEMAND}      return DEMAND;
 {PRODPLAN}    return PRODPLAN;
 {PRODUCERSET} return PRODSET;
+{ADDTOPRODUCERSET} return ADDPRODSET;
+{RMFROMPRODUCERSET} return RMPRODSET;
 
  /*
   * The single-characters tokens 
