@@ -15,6 +15,7 @@ struct NodeInfo
 {
   void *         product;
   double         quantity;
+  Planta *       plant = nullptr;
   bool           is_in_queue = false;
 
   enum class ProductType { Product, Input } type;
@@ -36,7 +37,8 @@ struct NodeInfo
 
   friend ostream & operator << (ostream & out, const NodeInfo & info)
   {
-    out << info.to_str() << "\\n" << info.quantity;
+    out << info.to_str() << "\\n" << info.quantity << "\\n"
+	<< (info.plant == nullptr ? "New plant" : info.plant->nombre);
     return out;
   }
 };
@@ -44,6 +46,27 @@ struct NodeInfo
 using PPNode = Graph_Anode<NodeInfo>;
 using PPArc = Graph_Aarc<double>; // double for quantity in relationship
 using PPGraph = Array_Graph<PPNode, PPArc>;
+
+using ProducerSet = DynSetTree<Productor *, Treap>;
+
+                       /* plant, capacity */
+using PlantCap = tuple<Planta *, double>;
+
+struct CmpPlantCap
+{
+  bool operator () (const PlantCap & a, const PlantCap & b) const
+  {
+    return get<0>(a) < get<0>(b);
+  }
+};
+
+using PlantTable = DynSetTree<PlantCap, Treap, CmpPlantCap>;
+
+using ProductMap = DynMapTreap<MetaProducto *, PlantCap *>;
+
+using PlantMap = DynMapTreap<string, ProductMap>;
+
+using ClassPlantSet = tuple<PlantMap, PlantTable>;
 
 struct CmpNetArcs
 {
@@ -69,7 +92,7 @@ struct CmpPPArcs
       return true;
     
     return not (a2->src_node < a1->src_node) and a1->tgt_node < a2->tgt_node;
-    }
+  }
 };
 
 using NetArcsIdx = DynSetTreap<Net::Arc *, CmpNetArcs>;
@@ -93,11 +116,17 @@ struct ProdPlanGraph : PPGraph
   Node * create_node_and_connect(void *, double, NodeInfo::ProductType, Node *,
 				 PPNodesIdx &, PPArcsIdx &);
 
+  void build_pp(DynList<pair<MetaProducto *, double>> &, size_t,
+		ProducerSet &);
+
   void build_pp(DynList<pair<MetaProducto *, double>> &, size_t);
   
 private:
-  /// Builds a production plan with an breadth first algorithm.
-  void build_pp(MetaProducto *, double, size_t, NetArcsIdx &);
+  /// Builds a production plan with a breadth first algorithm.
+  void build_pp(MetaProducto *, double, size_t, NetArcsIdx &,
+		ClassPlantSet &);
+
+  ClassPlantSet classify_plants(ProducerSet &);
 };
 
 # endif // PRODPLANGRAPH_H

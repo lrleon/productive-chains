@@ -82,7 +82,8 @@ ProdPlanGraph::create_node_and_connect(void * good, double quantity,
 }
 
 void ProdPlanGraph::build_pp(DynList<pair<MetaProducto *, double>> & list,
-			     size_t max_threshold)
+			     size_t max_threshold,
+			     DynSetTree<Productor *, Treap> & producer_set)
 {
   NetArcsIdx net_arcs;
 
@@ -93,17 +94,28 @@ void ProdPlanGraph::build_pp(DynList<pair<MetaProducto *, double>> & list,
   
   cout << "Done!\n";
 
+  ClassPlantSet class_plant_set = classify_plants(producer_set);
+
   list.for_each([&](auto p)
 		{
-		  build_pp(p.first, p.second, max_threshold, net_arcs);
+		  build_pp(p.first, p.second, max_threshold, net_arcs,
+			   class_plant_set);
 		});
 
   cout << "Done!\n";
 }
 
+void ProdPlanGraph::build_pp(DynList<pair<MetaProducto *, double>> & list,
+			     size_t max_threshold)
+{
+  DynSetTree<Productor *, Treap> empty_producer_set;
+
+  build_pp(list, max_threshold, empty_producer_set);
+}
 
 void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
-			     size_t max_threshold, NetArcsIdx & net_arcs)
+			     size_t max_threshold, NetArcsIdx & net_arcs,
+			     ClassPlantSet & plant_set)
 {
   PPNodesIdx node_set;
   PPArcsIdx arc_set;
@@ -201,6 +213,11 @@ void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
 		}
 	    }
 
+	  /* Buscar en productores cuáles pueden aumentar su producción y agregar
+	     nodos.
+	  */
+
+	  
 	  assert(prod != nullptr);
 
 	  Node * q = create_node_and_connect(prod, quan,
@@ -216,4 +233,37 @@ void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
     }
   if (::verbose)
     cout << "Done!\n";
+}
+
+ClassPlantSet ProdPlanGraph::classify_plants(ProducerSet & prod_set)
+{
+  ClassPlantSet ret;
+
+  if (prod_set.is_empty())
+    return ret;
+
+  if (::verbose)
+    cout << "Classifying plants...\n";
+  
+  prod_set.for_each([&](Productor * producer) {
+      
+      producer->productos.for_each([&](const auto & item) {
+
+	  Planta * plant = map->tabla_plantas(get<1>(item.second));
+
+	  auto pc = get<1>(ret).search_or_insert(make_tuple(plant, plant->cap));
+
+	  MetaProducto * product = map->tabla_productos(item.first);
+
+	  auto & product_map = get<0>(ret)[get<0>(item.second)];
+
+	  product_map.insert(product, pc);
+	});
+      
+    });
+
+  if (::verbose)
+    cout << "Done!\n";
+
+  return ret;
 }

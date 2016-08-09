@@ -243,7 +243,18 @@ exp : LOAD ref_exp { $$ = new Load(static_cast<StringExp*>($2)); }
       {
 	$$ = new ProdPlan($2, $3, $4, $5);
       }
-    | PRODPLAN VARNAME ref_exp ref_exp { $$ = new ProdPlanList($2, $3, $4); }
+    | PRODPLAN VARNAME ref_exp ref_exp ref_exp VARNAME
+      {
+	$$ = new ProdPlan($2, $3, $4, $5, $6);
+      }
+    | PRODPLAN VARNAME ref_exp ref_exp
+      {
+	$$ = new ProdPlanList($2, $3, $4);
+      }
+    | PRODPLAN VARNAME ref_exp ref_exp VARNAME
+      {
+	$$ = new ProdPlanList($2, $3, $4, $5);
+      }
     | PRODSET VARNAME '{' prod_set_items '}' { $$ = new ProducerSetExp($2, $4); }
     | PRODSET VARNAME '{' '}' {  $$ = new ProducerSetExp($2); }
 ;
@@ -1555,6 +1566,21 @@ ExecStatus DemandCmd::execute()
   return make_pair(true, "");
 }
 
+ExecStatus semant_producer_set(const string & name,
+			       DynSetTree<Productor *, Treap> *& set_ptr,
+			       MetaMapa * mapa_ptr)
+{
+  if (name == ProdPlan::NO_PROD_SET)
+      {
+	set_ptr = nullptr;
+	return make_pair(true, "");
+      }
+
+  return semant_prodset(name, set_ptr, mapa_ptr);
+}
+
+const string ProdPlan::NO_PROD_SET = "no prod set";
+
 ExecStatus ProdPlan::semant()
 {
   auto r = ::semant_mapa_or_net(map_name, map_ptr, net_ptr);
@@ -1579,6 +1605,11 @@ ExecStatus ProdPlan::semant()
   if (not tres.first.first)
     return tres.first;
 
+  auto psres = semant_producer_set(prod_set_name, prod_set, map_ptr);
+
+  if (not psres.first)
+    return psres;
+
   assert(product != nullptr);
   result.pp.map = map_ptr;
 
@@ -1586,7 +1617,12 @@ ExecStatus ProdPlan::semant()
     {
       DynList<pair<MetaProducto *, double>> l =
 	{ make_pair(product, qres.second) };
-      result.pp.build_pp(l, tres.second);
+
+      if (prod_set == nullptr)
+	result.pp.build_pp(l, tres.second);
+      else
+	result.pp.build_pp(l, tres.second, *prod_set);
+	
     }
   catch (const exception & e)
     {
@@ -1663,11 +1699,19 @@ ExecStatus ProdPlanList::semant()
   if (not tres.first.first)
     return tres.first;
 
+  auto psres = semant_producer_set(prod_set_name, prod_set, map_ptr);
+
+  if (not psres.first)
+    return psres;
+
   result.pp.map = map_ptr;
 
   try
     {
-      result.pp.build_pp(*list, tres.second);
+      if (prod_set == nullptr)
+	result.pp.build_pp(*list, tres.second);
+      else
+	result.pp.build_pp(*list, tres.second, *prod_set);
     }
   catch (const exception & e)
     {

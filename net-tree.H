@@ -1031,10 +1031,7 @@ struct Demand : public Exp
   
   Demand(const string & name, Exp * id, Exp * q, Exp * mt)
     : Exp(DEMAND), map_name(name), exp_id(id), exp_quantity(q),
-      exp_threshold(mt)
-  {
-    cout << "Reconozco " << q->type_string() << endl; // TMP
-  }
+      exp_threshold(mt) {  }
 
   ExecStatus semant();
 
@@ -1054,6 +1051,8 @@ struct DemandCmd : public Demand
 
 struct ProdPlan : public Exp
 {
+  static const string NO_PROD_SET;
+  
   Net * net_ptr;
   MetaMapa * map_ptr = nullptr;
   string map_name;
@@ -1062,10 +1061,13 @@ struct ProdPlan : public Exp
   Exp * exp_threshold;
   MetaProducto * product = nullptr;
   VarProdPlan result;
+  string prod_set_name;
+  DynSetTree<Productor *, Treap> * prod_set = nullptr;
   
-  ProdPlan(const string & name, Exp * id, Exp * q, Exp * mt)
+  ProdPlan(const string & name, Exp * id, Exp * q, Exp * mt,
+	   const string & psname = NO_PROD_SET)
     : Exp(PRODPLAN), map_name(name), exp_id(id), exp_quantity(q),
-      exp_threshold(mt) {}
+      exp_threshold(mt), prod_set_name(psname) {}
 
   ExecStatus semant();
 
@@ -1086,10 +1088,13 @@ struct ProdPlanList : public Exp
   Exp * exp_threshold;
   DynList<pair<MetaProducto *, double>> * list = nullptr;
   VarProdPlan result;
+  string prod_set_name;
+  DynSetTree<Productor *, Treap> * prod_set = nullptr;
   
-  ProdPlanList(const string & name, Exp * dr, Exp * mt)
+  ProdPlanList(const string & name, Exp * dr, Exp * mt,
+	       const string & psname = ProdPlan::NO_PROD_SET)
     : Exp(PRODPLANLIST), map_name(name), exp_demand_result(dr),
-      exp_threshold(mt) {}
+      exp_threshold(mt), prod_set_name(psname) {}
 
   ExecStatus semant();
 
