@@ -162,6 +162,10 @@ help_exp: HELP           { $$ = new Help; }
         | HELP INPUTS    { $$ = new Help(Exp::Type::INPUTS); }
         | HELP PATH      { $$  = new Help(Exp::Type::PATH); }
         | HELP DEMAND    { $$  = new Help(Exp::Type::DEMAND); }
+        | HELP PRODPLAN    { $$  = new Help(Exp::Type::PRODPLAN); }
+        | HELP PRODSET    { $$  = new Help(Exp::Type::PRODSET); }
+        | HELP ADDPRODSET    { $$  = new Help(Exp::Type::ADDPRODUCERSET); }
+        | HELP RMPRODSET    { $$  = new Help(Exp::Type::RMPRODUCERSET); }
 ;
 
 item_list: ref_exp 
@@ -314,7 +318,7 @@ rvalue: VARNAME
 
 %%
 
-void yyerror(char const * s) 
+void yyerror(char const *) 
 {
   cout << "Syntax error" << endl
        << endl
@@ -323,7 +327,8 @@ void yyerror(char const * s)
        << "LOAD SAVE EXIT INFO LS RM SEARCH PRODUCER PRODUCERS PRODUCT" << endl
        << "ID REGEX LIST APPEND HELP COD TYPE RIF NODE REACHABLE COVER" << endl
        << "DOT UPSTREAM INPUTS OUTPUTS INPUT OUTPUT ARCS PATH RANKS" << endl
-       << "SHAREHOLDER DEMAND PRODPLAN PPDOT" << endl
+       << "SHAREHOLDER DEMAND PRODPLAN PPDOT PRODUCERSET" << endl
+       << "ADDTOPRODUCERSET RMFROMPRODUCERSET" << endl
        << endl;
 }
 

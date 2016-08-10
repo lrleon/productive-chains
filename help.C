@@ -2,17 +2,54 @@
 # include <net-tree.H>
 
 static const char * demand =
-  R"(DEMAND <map-var> <id-exp> <cant>
+  R"(DEMAND <map-var> <id-exp> <cant> <max-threshold>
 
   Estudia si en el mapa expresado por <map-var> se satisface la demanda <cant>
-  del bien identificado con <id-exp>
+  del bien identificado con <id-exp>. <max-threshold> especifica la distancia
+  de edición máxima entre dos nombres de productos para hacer emparejamiento
 
   Ejemplo:
 
-  d = demand mapa 12345 1000
+  d = demand mapa 12345 1000 50
 
 )";
-  
+
+static const char * prodplan =
+  R"(PRODPLAN <map-var> <id-exp> <cant> <max-threshold>
+     PRODPLAN <map-var> <id-exp> <cant> <max-threshold> <producer-set>
+     PRODPLAN <map-var> <res-demand> <max-threshold>
+     PRODPLAN <map-var> <res-demand> <max-threshold> <producer-set>
+
+  Ejemplo:
+
+  pp = prodplan mapa 12345 1000 50
+
+)";
+
+static const char * producerset =
+  R"(PRODUCERSET <mapa> { <rif-1>, <rif-2>, ..., <rif-n> }
+    
+  Ejemplos:
+
+  ps1 = producerset mapa { \"J123456789\", \"G987654321\" }
+  ps2 = producerset mapa { }
+)";
+
+static const char * addtoproducerset =
+  R"(ADDTOPRODUCERSET <mapa> <producer-set> { <rif-1>, <rif-2>, ..., <rif-n> }
+    
+  Ejemplo:
+
+  addtoproducerset mapa ps { \"J123456789\", \"G987654321\" }
+)";
+
+static const char * rmfromproducerset =
+  R"(RMFROMPRODUCERSET <mapa> <producer-set> { <rif-1>, <rif-2>, ..., <rif-n> }
+    
+  Ejemplo:
+
+  rmfromproducerset mapa ps { \"J123456789\", \"G987654321\" }
+)";
 
 static const char * load =
   R"(LOAD <string-exp>
@@ -140,27 +177,6 @@ R"(Calcula el grafo total de crubrimiento a partir de un nodo
    )";
 
 static const char * upstream =
-R"(Calcula el grafo aguas arriba a partir de un nodo y un producto
-   
-       upstream <mapa-var> <nodo-var> <prod-exp>
-
-   Dado la variable nodo <nodo-var> sobre el mapa <mapa-var>, upstream revisa 
-   la composición de insumos del producto en la expresión <prod-var>. A 
-   partir de allí se miran hacia atrás los arcos de entrada de <nodo-var>
-   que se correspondan con los insumos de <prod-var>. Luego, recursivamente, 
-   se examinan los nodos asociados a los insumos y así recursivamente hasta 
-   que ya nos sea posible.
-
-   <prod-var> puede ser:
-
-   1. Una constante o variable string conteniendo un código arancelario
-
-   2. Una constante o variable entera conteniendo el id del producto
-
-   3. Una variable de tipo producto
-   )";
-
-static const char * up =
 R"(Calcula el grafo aguas arriba a partir de un nodo y un producto
    
        upstream <mapa-var> <nodo-var> <prod-exp> <int-exp>
@@ -352,7 +368,7 @@ ExecStatus Help::execute()
     case INFO: cout << info << endl; break;
     case REACHABLE: cout << reachable << endl; break;
     case COVER: cout << cover << endl; break;
-    case UPSTREAM: cout << up << endl; break;
+    case UPSTREAM: cout << upstream << endl; break;
     case INPUTS: cout << inputs << endl; break;
     case ARCS: cout << arcs_help << endl; break;
     case PATH: cout << path_help << endl; break;
@@ -362,6 +378,11 @@ ExecStatus Help::execute()
     case HOLDER: cout << holder_help << endl; break;
     case HEGEMONY: cout << hegemony_help << endl; break;
     case DEMAND: cout << demand << endl; break;
+    case PRODPLAN: cout << prodplan << endl; break;
+    case PRODSET: cout << producerset << endl; break;
+    case ADDPRODUCERSET: cout << addtoproducerset << endl; break;
+    case RMPRODUCERSET: cout << rmfromproducerset << endl; break;
+      
     default: cout << "No help topic" << endl; break;
     }
   return make_pair(true, "");

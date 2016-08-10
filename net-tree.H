@@ -787,7 +787,7 @@ struct ExpListExp : public Exp
   DynList<Exp *> list;
 
   ExpListExp() : Exp(EXPLIST) { }
-  ExecStatus execute() { make_pair(true, ""); }
+  ExecStatus execute() { return make_pair(true, ""); }
   void free() {}
   void append(Exp * e) { list.append(e); }
 };

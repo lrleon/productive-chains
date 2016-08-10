@@ -24,7 +24,20 @@ MetaInsumo * to_input(void * p)
   return reinterpret_cast<MetaInsumo *>(p);
 }
 
-string NodeInfo::to_str() const
+string NodeInfo::get_cmp_key() const
+{
+  stringstream s;
+  s << get_id() << '-';
+
+  if (plant == nullptr)
+    s << "-1";
+  else
+    s << plant->id;
+  
+  return s.str();
+}
+
+const string & NodeInfo::get_name() const
 {
   if (type == ProductType::Product)
     return to_product(product)->nombre;
@@ -40,26 +53,81 @@ Uid NodeInfo::get_id() const
     return to_input(product)->id;
 }
 
-ProdPlanGraph::Node *
+PlantCap * search_plant(MetaProducto * product, ClassPlantSet & cps,
+			size_t threshold)
+{
+  if (get<0>(cps).is_empty())
+    return nullptr;
+  
+  PlantMap & plant_map = get<0>(cps);
+
+  auto p_ptr = plant_map.search(product->cod_aran);
+
+  if (p_ptr == nullptr)
+    return nullptr;
+
+  ProductMap & product_map = p_ptr->second;
+
+  auto pm_ptr = product_map.find_ptr([product,threshold](auto item) {
+      return levenshtein(product->nombre, item.first->nombre) <= threshold;
+    });
+
+  if (pm_ptr == nullptr)
+    return nullptr;
+  
+
+  if (get<1>(*pm_ptr->second) == 0)
+    return nullptr;
+
+  return pm_ptr->second;
+}
+
+         // Created node,    set quantiy
+tuple<ProdPlanGraph::Node *, double>
 ProdPlanGraph::create_node_and_connect(void * good, double quantity,
 				       NodeInfo::ProductType t,
 				       Node * p, PPNodesIdx & nodes,
-				       PPArcsIdx & arcs)
+				       PPArcsIdx & arcs,
+				       ClassPlantSet & plant_set,
+				       double threshold)
 {
+  double quantity_to_set = quantity;
+  
   Node test_node(NodeInfo(good, 0));
+
+  PlantCap * plant = nullptr;
+
+  if (t == NodeInfo::ProductType::Product)
+    {
+      plant = search_plant(to_product(good), plant_set, threshold);
+
+      if (plant != nullptr)
+	{
+	  test_node.get_info().plant = get<0>(*plant);
+	  quantity_to_set = min(quantity, get<1>(*plant));
+	  get<1>(*plant) -= quantity_to_set;
+	}
+    }
+  
   Node ** result_node = nodes.search(&test_node);
   
   Node * q = nullptr;
   
   if (result_node == nullptr)
     {
-      q = insert_node(NodeInfo(good, quantity, t));
+      q = insert_node(NodeInfo(good, quantity_to_set, t));
+
+      if (plant == nullptr)
+	q->get_info().plant = nullptr;
+      else
+	q->get_info().plant = get<0>(*plant);
+      
       nodes.insert(q);
     }
   else
     {
       q = *result_node;
-      q->get_info().quantity += quantity;
+      q->get_info().quantity += quantity_to_set;
     }
   
   // Ver si existe arco entre q y p
@@ -69,16 +137,16 @@ ProdPlanGraph::create_node_and_connect(void * good, double quantity,
   
   if (result_arc == nullptr)
     {
-      a = insert_arc(q, p, quantity);
+      a = insert_arc(q, p, quantity_to_set);
       arcs.insert(a);
     }
   else
     {
       a = *result_arc;
-      a->get_info() = quantity;
+      a->get_info() = quantity_to_set;
     }
   
-  return q;
+  return make_tuple(q, quantity_to_set);
 }
 
 void ProdPlanGraph::build_pp(DynList<pair<MetaProducto *, double>> & list,
@@ -96,10 +164,13 @@ void ProdPlanGraph::build_pp(DynList<pair<MetaProducto *, double>> & list,
 
   ClassPlantSet class_plant_set = classify_plants(producer_set);
 
+  PPNodesIdx node_set;
+  PPArcsIdx arc_set;
+
   list.for_each([&](auto p)
 		{
 		  build_pp(p.first, p.second, max_threshold, net_arcs,
-			   class_plant_set);
+			   class_plant_set, node_set, arc_set);
 		});
 
   cout << "Done!\n";
@@ -115,18 +186,57 @@ void ProdPlanGraph::build_pp(DynList<pair<MetaProducto *, double>> & list,
 
 void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
 			     size_t max_threshold, NetArcsIdx & net_arcs,
-			     ClassPlantSet & plant_set)
+			     ClassPlantSet & plant_set,
+			     PPNodesIdx & node_set, PPArcsIdx & arc_set)
 {
-  PPNodesIdx node_set;
-  PPArcsIdx arc_set;
-
   DynListQueue<PPGraph::Node *> queue;
   
-  Node * node = insert_node(NodeInfo(product, quantity));
-  node->get_info().is_in_queue = true;
+  double desired_quantity = quantity;
+  
+  while (desired_quantity > 0.0)
+    {
+      double quantity_to_set = desired_quantity;
+      
+      PlantCap * plant = search_plant(product, plant_set, max_threshold);
 
-  node_set.insert(node);
-  queue.put(node);
+      Node test_node(NodeInfo(product, 0));
+
+      if (plant != nullptr)
+	{
+	  test_node.get_info().plant = get<0>(*plant);
+	  quantity_to_set = min(desired_quantity, get<1>(*plant));
+	  get<1>(*plant) -= quantity_to_set;
+	}
+      
+      Node ** result_node = node_set.search(&test_node);
+      
+      Node * node = nullptr;
+      
+      if (result_node == nullptr)
+	{
+	  node = insert_node(NodeInfo(product, quantity_to_set));
+
+	  if (plant == nullptr)
+	    node->get_info().plant = nullptr;
+	  else
+	    node->get_info().plant = get<0>(*plant);
+	  
+	  node_set.insert(node);
+	}
+      else
+	{
+	  node = *result_node;
+	  node->get_info().quantity += quantity_to_set;
+	}
+
+      if (not node->get_info().is_in_queue)
+	{
+	  queue.put(node);
+	  node->get_info().is_in_queue = true;
+	}
+
+      desired_quantity -= quantity_to_set;
+    }
 
   while (not queue.is_empty())
     {
@@ -160,7 +270,8 @@ void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
 	  if (arc_in_net == nullptr) // Creo nodo insumo y no encolo
 	    {
 	      create_node_and_connect(input, quan, NodeInfo::ProductType::Input,
-				      p, node_set, arc_set);
+				      p, node_set, arc_set, plant_set,
+				      max_threshold);
 	      return;
 	    }
 
@@ -192,7 +303,8 @@ void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
 	  if (filtered_list.is_empty())
 	    {
 	      create_node_and_connect(input, quan, NodeInfo::ProductType::Input,
-				      p, node_set, arc_set);
+				      p, node_set, arc_set, plant_set,
+				      max_threshold);
 	      return;
 	    }
 
@@ -213,21 +325,24 @@ void ProdPlanGraph::build_pp(MetaProducto * product, double quantity,
 		}
 	    }
 
-	  /* Buscar en productores cuáles pueden aumentar su producción y agregar
-	     nodos.
-	  */
-
-	  
 	  assert(prod != nullptr);
 
-	  Node * q = create_node_and_connect(prod, quan,
-					     NodeInfo::ProductType::Product,
-					     p, node_set, arc_set);
-
-	  if (not q->get_info().is_in_queue)
+	  double desired_quantity = quan;
+	  
+	  while (desired_quantity > 0.0)
 	    {
-	      queue.put(q);
-	      q->get_info().is_in_queue = true;
+	      auto res = create_node_and_connect(prod, desired_quantity,
+						 NodeInfo::ProductType::Product,
+						 p, node_set, arc_set,
+						 plant_set, max_threshold);
+	  
+	      if (not get<0>(res)->get_info().is_in_queue)
+		{
+		  queue.put(get<0>(res));
+		  get<0>(res)->get_info().is_in_queue = true;
+		}
+
+	      desired_quantity -= get<1>(res);
 	    }
 	});
     }
@@ -251,7 +366,14 @@ ClassPlantSet ProdPlanGraph::classify_plants(ProducerSet & prod_set)
 
 	  Planta * plant = map->tabla_plantas(get<1>(item.second));
 
-	  auto pc = get<1>(ret).search_or_insert(make_tuple(plant, plant->cap));
+	  if (plant->cap == 0)
+	    return;
+
+	  double possible_prod = 100.0 * get<2>(item.second) / plant->cap;
+	  double available_prod = possible_prod - get<2>(item.second);
+
+	  auto pc = get<1>(ret).search_or_insert(make_tuple(plant,
+							    available_prod));
 
 	  MetaProducto * product = map->tabla_productos(item.first);
 

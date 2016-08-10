@@ -26,9 +26,11 @@ struct NodeInfo
     // Empty
   }
 
-  string to_str() const;
+  string get_cmp_key() const;
 
   Uid get_id() const;
+
+  const string & get_name() const;
 
   bool operator == (const NodeInfo & info) const
   {
@@ -37,7 +39,7 @@ struct NodeInfo
 
   friend ostream & operator << (ostream & out, const NodeInfo & info)
   {
-    out << info.to_str() << "\\n" << info.quantity << "\\n"
+    out << info.get_name() << "\\n" << info.quantity << "\\n"
 	<< (info.plant == nullptr ? "New plant" : info.plant->nombre);
     return out;
   }
@@ -49,7 +51,7 @@ using PPGraph = Array_Graph<PPNode, PPArc>;
 
 using ProducerSet = DynSetTree<Productor *, Treap>;
 
-                       /* plant, capacity */
+                       /* plant, capacity (available quantity) */
 using PlantCap = tuple<Planta *, double>;
 
 struct CmpPlantCap
@@ -80,7 +82,7 @@ struct CmpPPNodes
 {
   bool operator () (PPNode * p, PPNode * q) const
   {
-    return p->get_info().get_id() < q->get_info().get_id();
+    return p->get_info().get_cmp_key() < q->get_info().get_cmp_key();
   }
 };
 
@@ -113,9 +115,10 @@ struct ProdPlanGraph : PPGraph
 
   Net::Arc * search_net_arc(NetArcsIdx &, Uid);
 
-  Node * create_node_and_connect(void *, double, NodeInfo::ProductType, Node *,
-				 PPNodesIdx &, PPArcsIdx &);
-
+  tuple<Node *, double>
+  create_node_and_connect(void *, double, NodeInfo::ProductType, Node *,
+			  PPNodesIdx &, PPArcsIdx &, ClassPlantSet &, double);
+  
   void build_pp(DynList<pair<MetaProducto *, double>> &, size_t,
 		ProducerSet &);
 
@@ -124,7 +127,7 @@ struct ProdPlanGraph : PPGraph
 private:
   /// Builds a production plan with a breadth first algorithm.
   void build_pp(MetaProducto *, double, size_t, NetArcsIdx &,
-		ClassPlantSet &);
+		ClassPlantSet &, PPNodesIdx &, PPArcsIdx &);
 
   ClassPlantSet classify_plants(ProducerSet &);
 };
