@@ -24,7 +24,7 @@ LIBS = -L $(ALEPH) \
 
 OBJ = grafo.o net.o help.o prod-plan-graph.o demand-satisfaction.o
 
-all: test test-1 test-2 test-3 test-io test-1-op test-2-op test-3-op transform-data transform-data-op transform-data-2 transform-data-2-op test-load-grafo test-load-productores test-load-productos load-net repl test-net test-lex
+all: test test-io transform-data transform-data-op transform-data-2 transform-data-2-op test-load-grafo test-load-productores test-load-productos load-net repl test-net test-lex
 
 clean:
 	rm -f test test-op testcsv test-1 test-2 test-3 test-1-op test-2-op test-3-op test-io transform-data transform-data-op transform-data-2 transform-data-2-op test-load-grafo test-load-productores test-load-productos load-net repl net-lex.C test-net test-lex $(OBJ) net-lex.o text.tab.o prod-plan-graph.o test.tab.h test.tab.c test.tab.o test.tab-op.o csvparser.o *~
@@ -37,24 +37,6 @@ grafo.o: grafo.H tablas.H grafo.C
 
 net.o: grafo.H tablas.H grafo.C net.H
 	$(CXX) $(FLAGS) $(INCLUDE) -c net.C
-
-test-1: test-1.C csvparser.o tablas.H grafo.H
-	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ $(LIBS)
-
-test-1-op: test-1.C tablas.H grafo.H
-	$(CXX) $(OPT) $(INCLUDE) test-1.C -o $@ $(LIBS)
-
-test-2: test-2.C tablas.H grafo.H
-	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ $(LIBS)
-
-test-2-op: test-2.C tablas.H grafo.H
-	$(CXX) $(OPT) $(INCLUDE) test-2.C -o $@ $(LIBS)
-
-test-3: test-3.C tablas.H grafo.H
-	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ $(LIBS)
-
-test-3-op: test-3.C tablas.H grafo.H
-	$(CXX) $(OPT) $(INCLUDE) test-3.C -o $@ $(LIBS)
 
 testcsv: testcsv.C csvparser.o
 	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ csvparser.o $(LIBS)
@@ -77,8 +59,8 @@ transform-data-2: transform-data-2.C tablas.H grafo.H net.H grafo.o net.o
 transform-data-2-op: transform-data-2.C tablas.H grafo.H net.H grafo.o net.o
 	$(CXX) $(OPT) $(INCLUDE) transform-data-2.C -o $@ grafo.o net.o $(LIBS)
 
-test-load-grafo: test-load-grafo.C tablas.H grafo.H net.H
-	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ $(LIBS)
+test-load-grafo: test-load-grafo.C tablas.H grafo.H net.H grafo.o
+	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ grafo.o $(LIBS)
 
 test-load-productos: test-load-productos.C tablas.H grafo.H net.H
 	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ $(LIBS)
@@ -86,8 +68,8 @@ test-load-productos: test-load-productos.C tablas.H grafo.H net.H
 test-load-productores: test-load-productores.C tablas.H grafo.H net.H
 	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ $(LIBS)
 
-load-net: load-net.C tablas.H grafo.H net.H
-	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ $(LIBS)
+load-net: load-net.C tablas.H grafo.H net.H grafo.o net.o
+	$(CXX) $(FLAGS) $(INCLUDE) $@.C -o $@ grafo.o net.o $(LIBS)
 
 net-lex.C: net-lex.lex net-parser.H net.tab.c
 	${FLEX} -o net-lex.C net-lex.lex 

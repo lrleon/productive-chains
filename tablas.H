@@ -196,7 +196,8 @@ struct TablaMetaSocios : public DynArray<Socio>
 
   Socio * operator () (const string & rif) const noexcept
   {
-    return bsearch(*this, Socio(rif), Socio::CmpLess());
+    return bsearch(*static_cast<const DynArray<Socio>*>(this),
+		   Socio(rif), Socio::CmpLess());
   }  
 };
 
@@ -635,7 +636,8 @@ struct TablaProveedorInsumo : public DynArray<ProveedorInsumo>
   DynList<ProveedorInsumo*> operator() (Uid insumo_id) const
   {
     ProveedorInsumo p; p.insumo_id = insumo_id;
-    return bsearch_dup(*this, p, CmpLess());
+    return bsearch_dup(*static_cast<const DynArray<ProveedorInsumo>*>(this),
+		       p, CmpLess());
   } 
 };
 
@@ -941,8 +943,8 @@ struct MetaProducto
 	comb.append(make_tuple(id, cod, factor, arc_id));
       }
 
-    assert(eq(sort(comb.map<Uid>([] (auto c) { return get<0>(c); })), 
-	      sort(unique(comb).map<Uid>([] (auto c) { return get<0>(c); }))));
+    assert(eq(sort(comb.maps<Uid>([] (auto c) { return get<0>(c); })), 
+	      sort(unique(comb).maps<Uid>([] (auto c) { return get<0>(c); }))));
   }
 };
 
@@ -986,7 +988,8 @@ struct TablaMetaProductos : public DynArray<MetaProducto>
       cout << "    done!" << endl
 	   << "    Building index ... " << endl;
 
-    index = build_index_ptr(*this, cmp_id);
+    index = build_index_ptr(*static_cast<DynArray<MetaProducto>*>(this),
+			    cmp_id);
 
     if (::verbose)
       cout << "    done!" << endl;
@@ -997,7 +1000,8 @@ struct TablaMetaProductos : public DynArray<MetaProducto>
   DynList<MetaProducto*> operator () (const string & cod_aran) const noexcept
   {
     MetaProducto p; p.cod_aran = cod_aran;
-    return bsearch_dup(*this, p, cmp_cod);
+    return bsearch_dup(*static_cast<const DynArray<MetaProducto>*>(this),
+		       p, cmp_cod);
   }
 
   MetaProducto * operator () (Uid id) const noexcept
@@ -1023,9 +1027,9 @@ struct TablaMetaProductos : public DynArray<MetaProducto>
     size_t n;
     in >> n;
     reserve(n);
-    for (auto i = 0; i < n; ++i)
+    for (size_t i = 0; i < n; ++i)
       access(i).load(in);
-    index = build_index_ptr(*this, cmp_id);
+    index = build_index_ptr(*static_cast<DynArray<MetaProducto>*>(this), cmp_id);
     if (::verbose)
       cout << "done!" << endl
 	   << endl;
@@ -1036,7 +1040,7 @@ struct TablaMetaProductos : public DynArray<MetaProducto>
     if (::verbose)
       cout << "Checking productos consistency" << endl;
     const size_t n = size();
-    for (auto i = 0; i < n; ++i)
+    for (size_t i = 0; i < n; ++i)
       {
 	auto p = access(i);
 	auto cod_aran = p.cod_aran;
@@ -1118,7 +1122,7 @@ struct TablaMetaInsumos : public DynArray<MetaInsumo>
   MetaInsumo * operator () (Uid id) const noexcept
   {
     MetaInsumo p; p.id = id;
-    return bsearch(*this, p, cmp_id);
+    return bsearch(*static_cast<const DynArray<MetaInsumo>*>(this), p, cmp_id);
   }
 
   void save(ostream & out) const
@@ -1170,11 +1174,10 @@ struct TablaProductores : public DynArray<Productor>
 	auto planta_ptr = tabla_plantas(planta_id);
 	auto cantidad = prod.cantidad_decl;
 	assert(planta_ptr != nullptr);
-	auto productor_ptr = (*this)(planta_ptr->rif);
-	productor_ptr->productos.append(make_pair(prod.id,
-						  make_tuple(prod.cod_aran,
-							     planta_id,
-							     cantidad)));
+	Productor * productor_ptr = (*this)(planta_ptr->rif);
+	productor_ptr->productos.append(prod.id,
+					make_tuple(prod.cod_aran, planta_id,
+						   cantidad));
       });
     if (::verbose)
       cout << "    done" << endl;
@@ -1255,13 +1258,14 @@ struct TablaProductores : public DynArray<Productor>
   {
     Productor p;
     p.rif = rif;
-    return bsearch(*this, p);
+    return bsearch(*static_cast<const DynArray<Productor>*>(this), p);
   }
 
   // Determina el índice en la tabla de la entrada ptr
   size_t operator () (Productor * ptr) const
   {
-    long ret = binary_search(*this, *ptr);
+    long ret =
+      binary_search(*static_cast<const DynArray<Productor>*>(this), *ptr);
     if (ret < 0)
       throw domain_error("TablaProductores (): productor no encontrado");
     assert(ptr == &access(ret));
@@ -1296,7 +1300,7 @@ struct TablaProductores : public DynArray<Productor>
   {
     if (::verbose)
       cout << "Checking for producers consistency" << endl;
-    if (not is_sorted(*this))
+    if (not is_sorted(*static_cast<const DynArray<Productor>*>(this)))
       AH_ERROR("autotest: not sorted");
 
     for (size_t i = 0, n = size(); i < n; ++i)

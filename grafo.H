@@ -302,7 +302,7 @@ public:
 	if (producers.is_empty())
 	  {
 	    ++casos_vacios;
-	    nac_nodos = nac_list.map<SemiArco>([this] (auto t)
+	    nac_nodos = nac_list.maps<SemiArco>([this] (auto t)
               {
 		const string & rif = get<0>(t);
 		Node node(Nodo(rif, move(get<1>(t))));
@@ -318,7 +318,7 @@ public:
 	else 
 	  {
 	    ++casos_no_vacios;
-	    nac_nodos = producers.map<SemiArco>([this] (auto & t)
+	    nac_nodos = producers.maps<SemiArco>([this] (auto & t)
               {
 		Node node(Nodo(move(get<0>(t)), move(get<1>(t))));
 		auto ptr = tabla_nodos.search(&node);
@@ -332,7 +332,7 @@ public:
 	  }
       }
 
-    auto ext_nodos = ext_list.map<SemiArco>([this] (auto & t)
+    auto ext_nodos = ext_list.maps<SemiArco>([this] (auto & t)
       {
 	Node node(Nodo(true, move(get<0>(t)), move(get<1>(t))));
 	auto ptr = tabla_nodos.search(&node);

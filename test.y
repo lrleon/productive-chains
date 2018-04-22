@@ -2296,7 +2296,7 @@ void Inputs::report_product()
   using Lens = tuple<size_t, size_t, size_t, size_t>;
   using Line = tuple<string, string, string, string>;
 
-  DynList<Line> lines = producto_ptr->comb.map<Line>([] (auto c)
+  DynList<Line> lines = producto_ptr->comb.maps<Line>([] (auto c)
     {
       return make_tuple(to_string(get<0>(c)), get<1>(c), 
 			to_string(get<2>(c)), to_string(get<3>(c)));
@@ -2345,7 +2345,7 @@ void Inputs::report_node()
   const string col5 = "cantidad";
   const string col6 = "coste";
 
-  auto lines = mapa_ptr->net.in_arcs(node_ptr).map<Line>([] (auto a)
+  auto lines = mapa_ptr->net.in_arcs(node_ptr).maps<Line>([] (auto a)
     {
       const auto & info = a->get_info();
       return make_tuple(to_string(info.arco_id), info.cod_aran, 
@@ -2562,7 +2562,7 @@ static void arcs_report(MetaMapa * mapa_ptr, const DynList<Net::Arc*> & l)
 
   using Line = tuple<string,string,string,string,string,string>;
 
-  auto lines = l.map<Line>([mapa_ptr, tbl = mapa_ptr->tabla_insumos] (auto a)
+  auto lines = l.maps<Line>([mapa_ptr, tbl = mapa_ptr->tabla_insumos] (auto a)
     {
       auto src = mapa_ptr->net.get_src_node(a);
       auto tgt = mapa_ptr->net.get_tgt_node(a);
@@ -2740,7 +2740,7 @@ ExecStatus RanksExp::execute()
 void Shareholder::report()
 {
   using Line = tuple<string, string, string>;
-  auto l = lista.map<Line>([this] (auto p)
+  auto l = lista.maps<Line>([this] (auto p)
        {
 	 auto socio = mapa_ptr->tabla_socios(get<0>(p));
 	 return make_tuple(get<0>(p), socio->nombre, to_string(get<2>(p)));
@@ -2778,7 +2778,7 @@ ExecStatus ShareholderRif::execute()
   if (not p.first)
     return p;
 
-  lista = producer_ptr->socios.map<Desc>([this] (auto p)
+  lista = producer_ptr->socios.maps<Desc>([this] (auto p)
       {
 	auto socio = mapa_ptr->tabla_socios(p.first);
 	return make_tuple(p.first, socio->nombre, p.second);
@@ -2834,7 +2834,7 @@ ExecStatus ShareholderRegex::execute()
 void Holder::report()
 {
   using Line = tuple<string, string, string>;
-  auto l = lista.map<Line>([this] (auto p)
+  auto l = lista.maps<Line>([this] (auto p)
        {
 	 auto prod_ptr = mapa_ptr->tabla_productores(get<0>(p));
 	 return make_tuple(get<0>(p), prod_ptr->nombre, to_string(get<2>(p)));
@@ -2881,7 +2881,7 @@ ExecStatus HoldigRif::execute()
       return make_pair(false, s.str());
     }
   cout << "Holdings for " << rif << " " << ptr->nombre << ":" << endl;
-  lista = ptr->empresas.map<Desc>([this] (auto p)
+  lista = ptr->empresas.maps<Desc>([this] (auto p)
     {
       auto producer_ptr = mapa_ptr->tabla_productores(p.first);
       assert(producer_ptr);
@@ -2958,9 +2958,9 @@ ExecStatus Hegemony::execute()
 
   using Producer = tuple<string, string, float>;
   using Line = tuple<string, string, string, DynList<Producer>>;
-  auto lines = lista.map<Line>([this] (const auto & s)
+  auto lines = lista.maps<Line>([this] (const auto & s)
   {
-    auto l = s.empresas.template map<Producer>([this] (auto p)
+    auto l = s.empresas.template maps<Producer>([this] (auto p)
       { 
        	return make_tuple(p.first, 
 			  mapa_ptr->tabla_productores(p.first)->nombre,
@@ -2986,7 +2986,7 @@ ExecStatus Hegemony::execute()
 	   << " " << blanks2 << get<2>(l) << " : " << endl;
       using Line = tuple<string, string, string, string>;
       size_t i = 0;
-      auto lines = get<3>(l).template map<Line>([&i] (auto t)
+      auto lines = get<3>(l).template maps<Line>([&i] (auto t)
         {
 	  return make_tuple(to_string(++i), get<0>(t), 
 			    get<1>(t), to_string(get<2>(t)));

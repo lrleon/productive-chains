@@ -27,7 +27,11 @@ void process_comand_line(int argc, char *argv[])
 
   ifstream in(meta.getValue());
   if (in.fail())
-    throw domain_error(fmt("No puedo abrir %s", meta.getValue().c_str()));
+    {
+      ostringstream s;
+      s << "No puedo abrir " << meta.getValue().c_str();
+      throw domain_error(s.str());
+    }
 
   MetaMapa mapa(in);
   
